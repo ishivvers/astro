@@ -76,7 +76,25 @@ Original documentation:
 import numpy as np
 import pyfits as pf
 from ephem._libastro import eq_gal
-dust_map_location = '/home/isaac/Working/observations/dust_maps/'
+
+def load_dust_maps(dust_map_location='/home/isaac/Working/observations/dust_maps/'):
+    hdu = pf.open(dust_map_location+'SFD_dust_4096_ngp.fits')[0]
+    nsgp_n = hdu.header['LAM_NSGP']
+    scale_n = hdu.header['LAM_SCAL']
+    map_n = hdu.data
+    hdu = pf.open(dust_map_location+'SFD_dust_4096_sgp.fits')[0]
+    nsgp_s = hdu.header['LAM_NSGP']
+    scale_s = hdu.header['LAM_SCAL']
+    map_s = hdu.data
+    MAP_DICT = {}
+    MAP_DICT['N'] = [map_n, nsgp_n, scale_n]
+    MAP_DICT['S'] = [map_s, nsgp_s, scale_s]
+    return MAP_DICT
+try:
+    MAP_DICT = load_dust_maps()
+except:
+    print 'WARNING: cannot find/open dust maps, some functions may not work.'
+
 
 def dered_CCM(wave, flux, EBV, R_V=3.1):
     '''
@@ -93,8 +111,8 @@ def dered_CCM(wave, flux, EBV, R_V=3.1):
     ## Infrared ##
     mask = (x > 0.3) & (x < 1.1)
     if np.any(mask):
-        a[mask] =  0.574 * x[mask]^(1.61)
-        b[mask] = -0.527 * x[mask]^(1.61)
+        a[mask] =  0.574 * x[mask]**(1.61)
+        b[mask] = -0.527 * x[mask]**(1.61)
 
     ## Optical/NIR ##
     mask = (x >= 1.1) & (x < 3.3)
@@ -148,23 +166,9 @@ def remove_galactic_reddening( ra, dec, wave, flux, R_V=3.1, verbose=False ):
     R_V: the reddening coefficient to use
     '''
     try:
-        assert( set(['S','N']) == set(MAP_DICT.keys()))
+        assert( set(['S','N']) == set(MAP_DICT.keys()) )
     except:
-        try:
-            if verbose: print 'loading dust maps from',dust_map_location
-            hdu = pf.open(dust_map_location+'SFD_dust_4096_ngp.fits')[0]
-            nsgp_n = hdu.header['LAM_NSGP']
-            scale_n = hdu.header['LAM_SCAL']
-            map_n = hdu.data
-            hdu = pf.open(dust_map_location+'SFD_dust_4096_sgp.fits')[0]
-            nsgp_s = hdu.header['LAM_NSGP']
-            scale_s = hdu.header['LAM_SCAL']
-            map_s = hdu.data
-            MAP_DICT = {}
-            MAP_DICT['N'] = [map_n, nsgp_n, scale_n]
-            MAP_DICT['S'] = [map_s, nsgp_s, scale_s]
-        except:
-            raise IOError('cannot find/open dust maps')
+        raise IOError('dust map error!')
     # coordinate-to-pixel mapping from the dust map fits header
     X_pix = lambda l,b,pole: np.sqrt(1.-MAP_DICT[pole][1]*np.sin(b))*np.cos(l)*MAP_DICT[pole][2]
     Y_pix = lambda l,b,pole: -MAP_DICT[pole][1]*np.sqrt(1.-MAP_DICT[pole][1]*np.sin(b))*np.sin(l)*MAP_DICT[pole][2]
