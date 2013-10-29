@@ -1,5 +1,5 @@
 '''
-Copypasta/transliteration of the IDL library ccm_dered.pro routine.
+Mostly a copypasta/transliteration of the IDL library ccm_dered.pro routine.
 Dereddens a flux vector according to the CCM 1989 parameterization.
 
 Transliterator: Isaac Shivvers, Oct. 2013
@@ -74,6 +74,9 @@ Original documentation:
 ;-
 '''
 import numpy as np
+import pyfits as pf
+from ephem._libastro import eq_gal
+dust_map_location = '/home/isaac/Working/observations/dust_maps/'
 
 def dered_CCM(wave, flux, EBV, R_V=3.1):
     '''
@@ -133,3 +136,51 @@ def dered_CCM(wave, flux, EBV, R_V=3.1):
     A_V = R_V * EBV
     A_lambda = A_V * (a + b/R_V)
     return flux * 10.**(0.4*A_lambda)
+
+
+def remove_galactic_reddening( ra, dec, wave, flux, R_V=3.1, verbose=False ):
+    '''
+    Deredden a spectrum by the Milky Way reddening due to 
+     dust absorption (measured in the Schlegel et al. dust maps)
+    ra, dec: the obvious, in decimal degrees
+    wave: 1D wavelength vector (angstroms)
+    flux: 1D flux vector to get dereddened
+    R_V: the reddening coefficient to use
+    '''
+    try:
+        assert( set(['S','N']) == set(MAP_DICT.keys()))
+    except:
+        try:
+            if verbose: print 'loading dust maps from',dust_map_location
+            hdu = pf.open(dust_map_location+'SFD_dust_4096_ngp.fits')[0]
+            nsgp_n = hdu.header['LAM_NSGP']
+            scale_n = hdu.header['LAM_SCAL']
+            map_n = hdu.data
+            hdu = pf.open(dust_map_location+'SFD_dust_4096_sgp.fits')[0]
+            nsgp_s = hdu.header['LAM_NSGP']
+            scale_s = hdu.header['LAM_SCAL']
+            map_s = hdu.data
+            MAP_DICT = {}
+            MAP_DICT['N'] = [map_n, nsgp_n, scale_n]
+            MAP_DICT['S'] = [map_s, nsgp_s, scale_s]
+        except:
+            raise IOError('cannot find/open dust maps')
+    # coordinate-to-pixel mapping from the dust map fits header
+    X_pix = lambda l,b,pole: np.sqrt(1.-MAP_DICT[pole][1]*np.sin(b))*np.cos(l)*MAP_DICT[pole][2]
+    Y_pix = lambda l,b,pole: -MAP_DICT[pole][1]*np.sqrt(1.-MAP_DICT[pole][1]*np.sin(b))*np.sin(l)*MAP_DICT[pole][2]
+    # get galactic coordinates with eq_gal, which does everything in radians
+    ra_rad = ra*(np.pi/180.)
+    dec_rad = dec*(np.pi/180.)
+    l,b = eq_gal( 2000., ra_rad, dec_rad )
+    if verbose: print 'RA, Dec: %.3f, %.3f --> l, b: %.3f, %.3f'%(ra,dec,l,b)
+    if b>0:
+        pole = 'N'
+    else:
+        pole = 'S'
+    # get E(B-V) for these coordinates
+    X = int(round( X_pix(l,b,pole) ))
+    Y = int(round( Y_pix(l,b,pole) ))
+    EBV = MAP_DICT[pole][0][X,Y]
+    if verbose: print 'dereddening by E(B-V) =',EBV
+    # return the de-reddened flux vector
+    return dered_CCM( wave, flux, EBV, R_V )
