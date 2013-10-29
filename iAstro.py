@@ -15,6 +15,9 @@ try:
     from scipy.optimize import curve_fit
     from scipy.ndimage import percentile_filter
     from scipy.interpolate import UnivariateSpline
+except:
+    print 'iAstro: some packages did not load; some functions may not be available'
+try:
     from jdcal import gcal2jd
 except:
     print 'iAstro: some packages did not load; some functions may not be available'
@@ -812,4 +815,18 @@ def parse_sexagesimal(hmsdms):
 
 def date2jd( d ):
     return sum(gcal2jd(d.year,d.month,d.day)) + d.hour/24. + d.minute/3600. + d.second/86400.
+
+
+def doppshift( x, val, velocity=True ):
+    '''
+    Doppler shift a 1D wavelength array x (Angstroms) by val
+       (if velocity=True, val is km/s, if velocity=False, val is z)
+    Returns a corrected x array of same shape.
+    '''
+    x = np.array(x)
+    if velocity:
+        newx = x + x*(val/2.998E5)
+    else:
+        newx = x + x/(1+val)
+    return newx
 
