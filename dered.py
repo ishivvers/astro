@@ -186,5 +186,5 @@ def remove_galactic_reddening( ra, dec, wave, flux, R_V=3.1, verbose=False ):
     Y = int(round( Y_pix(l,b,pole) ))
     EBV = MAP_DICT[pole][0][X,Y]
     if verbose: print 'dereddening by E(B-V) =',EBV
-    # return the de-reddened flux vector
-    return dered_CCM( wave, flux, EBV, R_V )
+    # return the de-reddened flux vector and the E(B-V) used
+    return dered_CCM( wave, flux, EBV, R_V ), EBV

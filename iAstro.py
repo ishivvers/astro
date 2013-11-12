@@ -6,10 +6,16 @@ commonly used by me for astro work.
 Everything in CGS units.
 
 -Isaac Shivvers
+
 '''
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import colors
+#allcolors = colors.cnames.keys()  #this allows all colors, but some are dim
+allcolors = [c for c in colors.cnames.keys() if ('dark' in c) or ('medium') in c ] +\
+             'r g b c m k'.split()
 import re
+from astro import dered
 # looks like some versions of my python don't have the newest SciPY, so here's a hack
 try:
     from scipy.optimize import curve_fit
@@ -21,7 +27,10 @@ try:
     from jdcal import gcal2jd
 except:
     print 'iAstro: some packages did not load; some functions may not be available'
-
+try:
+    import mechanize
+except:
+    print 'iAstro: some packages did not load; some functions may not be available'
 
 
 class C:
@@ -817,16 +826,314 @@ def date2jd( d ):
     return sum(gcal2jd(d.year,d.month,d.day)) + d.hour/24. + d.minute/3600. + d.second/86400.
 
 
-def doppshift( x, val, velocity=True ):
+def doppcor( x, val, velocity=True ):
     '''
-    Doppler shift a 1D wavelength array x (Angstroms) by val
+    Doppler correct a 1D wavelength array x (Angstroms) by val
        (if velocity=True, val is km/s, if velocity=False, val is z)
     Returns a corrected x array of same shape.
     '''
     x = np.array(x)
     if velocity:
-        newx = x + x*(val/2.998E5)
+        newx = x - x*(val/2.998E5)
     else:
-        newx = x + x/(1+val)
+        newx = x/(1.0+val)
     return newx
+
+
+def parse_nist_table( s ):
+    wls, aks = [],[]
+    for row in s.split('\n'):
+        try:
+            vals = row.split('|')
+            wl = float(vals[0])
+            ak = float(vals[1])
+        except:
+            continue
+        wls.append(wl)
+        aks.append(ak)
+    return np.array(wls), np.array(aks)
+
+def query_nist(ion, low_wl, upp_wl, n_out=20):
+    '''
+    An interface to the NIST website. This function performs
+     a query for atomic lines of a certain ion.
+    Grabs the <n_out> strongest lines of <ion> in the range
+     [<low_wl>, <upp_wl>].
+    Returns: wls, strengths (Ak, in units of 10^8 s^-1)
+    '''
+
+    br = mechanize.Browser()
+    ws = 'http://physics.nist.gov/PhysRefData/ASD/lines_form.html'
+    br.open(ws)
+    f = br.forms().next() # 'f' is our primary interface to the site
+
+    f.set_value(ion, name='spectra')
+    f.set_value(str(low_wl), name='low_wl')    # set the upper and lower wavelengths (in A)
+    f.set_value(str(upp_wl), name='upp_wl')
+
+    # select Angstroms for our WL units and an ascii table for output (no javascript)
+    c = f.find_control(name='unit')
+    c.items[0].selected = True
+    c = f.find_control(name='format')
+    c.items[1].selected = True
+    c = f.find_control(name='remove_js')
+    c.items[0].selected = True
+
+    # only return lines with observed wavelengths
+    c = f.find_control(name='line_out')
+    c.items[3].selected = True
+
+    # return Ak in 10^8 s-1 units
+    c = f.find_control(name='A8')
+    c.items[0].selected = True
+
+    # deselect a host of irrelevant outputs
+    to_deselect = ['bibrefs', 'show_calc_wl', 'intens_out', 'conf_out', 'term_out', 'enrg_out', 'J_out']
+    for n in to_deselect:
+        c = f.find_control(name=n)
+        c.items[0].selected = False
+
+    response = mechanize.urlopen(f.click())
+    html = response.read()
+    tab = html.split('<pre>')[1].split('</pre>')[0]
+    wls, aks = parse_nist_table( tab )
+
+    # return the strongest lines
+    mask = np.argsort(aks)[:-n_out:-1]
+    return wls[mask], aks[mask]
+
+class lookatme:
+    '''
+    A tool to look at the properties of a SN spectrum.
+    
+    To Do: pick subset of MPL colors to use
+           insert a legend w/ no box with SN label as well as any lines, if present
+    '''
+
+    def __init__(self, wl, fl, er=None, deredden=None, dez=None):
+        '''
+        wl,fl: 1D wavelength and flux vectors (wl in Angstroms)
+        er: optional 1D array of spectral errors
+        deredden: if given a float, will assume it is E(B-V) and deredden the spectrum
+                  if given a tuple of (ra,dec), will deredden by the MW absorption along that line of sight
+        dez: given a float value for z, will deredshift the spectrum
+        '''
+    
+        self.wl = np.array(wl)
+        self.orig_wl = np.array(wl)
+        self.fl = np.array(fl)
+        self.orig_fl = np.array(fl)
+        if er!=None:
+            self.er = np.array(er)
+        else:
+            self.er = None
+        # deredden, if desired
+        if deredden:
+            print 'dereddening spectrum'
+            if type(deredden) == tuple:
+                ra,dec = deredden
+                self.fl, self.EBV = dered.remove_galactic_reddening( ra, dec, self.wl, self.fl, verbose=True )
+            else:
+                self.fl = dered.dered_CCM( wl, fl, deredden )
+                self.EBV = deredden
+        else:
+            self.EBV = 0.0
+        if dez:
+            print 'deredshifting spectrum'
+            self.wl = doppcor( self.wl, dez, velocity=False )
+            self.dopcor = dez
+        else:
+            self.dopcor = 0.0
+        self.ion_lines = {}
+        self.ion_dict = {100:'H I', 200:'He I', 201:'He II', 300:'Li I', 301:'Li II', 400:'Be I',
+                401:'Be II', 402:'Be III', 500:'B I', 501:'B II', 502:'B III', 503:'B IV',
+                600:'C I', 601:'C II', 602:'C III', 603:'C IV', 700:'N I', 701:'N II',
+                702:'N III', 703:'N IV', 704:'N V', 800:'O I', 801:'O II', 802:'O III',
+                803:'O IV', 804:'O V', 900:'F I', 901:'F II', 1000:'Ne I', 1100:'Na I',
+                1200:'Mg I', 1201:'Mg II', 1300:'Al I', 1301:'Al II', 1302:'Al III', 1400:'Si I',
+                1401:'Si II', 1402:'Si III', 1403:'Si IV', 1500:'P I', 1501:'P II', 1502:'P III',
+                1600:'S I', 1601:'S II', 1602:'S III', 1700:'Cl I', 1800:'Ar I', 1801:'Ar II',
+                1900:'K I', 1901:'K II', 2000:'Ca I', 2001:'Ca II', 2100:'Sc I', 2101:'Sc II',
+                2200:'Ti I', 2201:'Ti II', 2202:'Ti III', 2300:'V I', 2301:'V II', 2302:'V III',
+                2400:'Cr I', 2401:'Cr II', 2402:'Cr III', 2500:'Mn I', 2501:'Mn II', 2502:'Mn III',
+                2600:'Fe I', 2601:'Fe II', 2602:'Fe III', 2603:'Fe IV', 2700:'Co I', 2701:'Co II',
+                2702:'Co III', 2703:'Co IV', 2800:'Ni I', 2801:'Ni II', 2802:'Ni III', 2803:'Ni IV',
+                2901:'Cu II', 3002:'Zn III', 3801:'Sr II', 5600:'Ba I', 5601:'Ba II'}
+        self.simple_lines = {'H I': [3970, 4102, 4341, 4861, 6563], 'Na I': [5890, 5896, 8183, 8195],
+                'He I': [3886, 4472, 5876, 6678, 7065], 'Mg I': [2780, 2852, 3829, 3832, 3838, 4571, 5167, 5173, 5184],
+                'He II': [3203, 4686], 'Mg II': [2791, 2796, 2803, 4481], 'O I': [7772, 7774, 7775, 8447, 9266],
+                'Si II': [3856, 5041, 5056, 5670, 6347, 6371], 'O II': [3727],
+                'Ca II': [3934, 3969, 7292, 7324, 8498, 8542, 8662], 'O III': [4959, 5007],
+                'Fe II': [5018, 5169], 'S II': [5433, 5454, 5606, 5640, 5647, 6715],
+                'Fe III': [4397, 4421, 4432, 5129, 5158], '[O I]':[6300, 6364]}
+        plt.ion()
+        self.fig = pretty_plot_spectra(self.wl, self.fl, err=self.er)
+        self.leg = None
+        plt.show()
+        plt.draw()
+        self.run()
+
+    def add_nist_lines(self, ion, v=0.0):
+        try:
+            print 'querying NIST for',ion,'lines'
+            wls, aks = query_nist(ion, np.min(self.wl), np.max(self.wl))
+            ymin,ymax = plt.axis()[2:]
+            color = allcolors[ np.random.randint(len(allcolors)) ]
+            print 'adding',color,'lines for',ion,'at velocity',v
+            wls = wls - wls*(v/3e5)
+            self.ion_lines[ion] = plt.vlines( wls, ymin, ymax, linestyles='dotted', color=color, label=ion )
+            self.leg = plt.legend(fancybox=True, loc='best' )
+            self.leg.get_frame().set_alpha(0.0)
+            plt.draw()
+        except:
+            print 'query failed! no internet? maybe a bad ion name?'
+
+    def add_simple_lines(self, ion, v=0.0):
+        try:
+            wls = np.array(self.simple_lines[ion])
+            ymin,ymax = plt.axis()[2:]
+            color = allcolors[ np.random.randint(len(allcolors)) ]
+            print 'adding',color,'lines for',ion,'at velocity',v
+            wls = wls - wls*(v/3e5)
+            self.ion_lines[ion] = plt.vlines( wls, ymin, ymax, linestyles='dotted', color=color, label=ion )
+            self.leg = plt.legend(fancybox=True, loc='best' )
+            self.leg.get_frame().set_alpha(0.0)
+            plt.draw()
+        except:
+            print 'query failed! maybe a bad ion name?'
+
+    def remove_lines(self, ions):
+        print 'removing lines for',ions
+        if type(ions) == list:
+            # ions is a list of ions
+            for ion in ions:
+                self.ion_lines[ion].remove()
+                self.ion_lines.pop(ion)
+        else:
+            # ions is a single ion
+            self.ion_lines[ions].remove()
+            self.ion_lines.pop(ions)
+        self.leg = plt.legend(fancybox=True, loc='best' )
+        if self.leg:
+            self.leg.get_frame().set_alpha(0.0)
+        plt.draw()
+
+    def modify_dopcor(self, newz):
+        if self.dopcor:
+            print 'removing previous redshift correction:',self.dopcor
+            self.wl = self.orig_wl
+        print 'correcting for a redshift of',newz
+        self.wl = doppcor( self.wl, newz, velocity=False )
+        self.dopcor = newz
+        plt.clf()
+        self.fig = pretty_plot_spectra(self.wl, self.fl, err=self.er, fig=self.fig)
+        for ion in self.ion_lines.keys():
+            self.ion_lines.pop(ion)
+        plt.draw()
+    
+    def deredden(self, EBV):
+        print 'dereddenening: E(B-V) =',EBV
+        self.fl = dered.dered_CCM( self.wl, self.fl, EBV )
+        self.EBV += EBV
+        plt.clf()
+        self.fig = pretty_plot_spectra(self.wl, self.fl, err=self.er, fig=self.fig)
+        for ion in self.ion_lines.keys():
+            self.ion_lines.pop(ion)
+        plt.draw()
+    
+    def dredden_gal(self, ra, dec):
+        self.fl = dered.remove_galactic_reddening( ra, dec, self.wl, self.fl, verbose=True )
+        plt.clf()
+        self.fig = pretty_plot_spectra(self.wl, self.fl, err=self.er, fig=self.fig)
+        for ion in self.ion_lines.keys():
+            self.ion_lines.pop(ion)
+        plt.draw()
+    
+    def run(self):
+        '''
+        Wait for input and respond to it.
+        '''
+        while True:
+            inn = raw_input('\nLookatme!\n\nOptions:\n'+\
+                            ' l: add/remove ion lines to the plot\n'+\
+                            ' z: deredshift the spectrum (removing any previous redshifts)\n'+\
+                            ' r: deredden the spectrum (without removing any previous reddening)\n'+\
+                            ' c: execute a python command\n'+\
+                            ' q: quit\n')
+            if 'l' in inn.lower():
+                inn = raw_input('\nenter an ion name (e.g. "Fe II") and an optional blueshift velocity,'+\
+                                'or "clear" to remove all lines, or "nist" to add lines from the NIST database.\n')
+                if 'clear' in inn:
+                    self.remove_lines( self.ion_lines.keys() )
+                elif 'nist' in inn:
+                    inn = raw_input('\nenter an ion name (e.g. "Fe II") and an optional blueshift velocity.\n')
+                    if ' '.join(inn.split(' ')[:2]) in self.ion_dict.values():
+                        ion = ' '.join(inn.split(' ')[:2])
+                    else:
+                        print 'You entered:',inn
+                        print 'I do not understand.'
+                        continue
+                    if ion in self.ion_lines.keys():
+                        self.remove_lines(ion)
+                    else:
+                        try:
+                            v = float(inn.split(' ')[2])
+                        except:
+                            v = 0.0
+                        self.add_nist_lines(ion, v)
+                elif ' '.join(inn.split(' ')[:2]) in self.simple_lines.keys():
+                    ion = ' '.join(inn.split(' ')[:2])
+                    if ion in self.ion_lines.keys():
+                        self.remove_lines(ion)
+                    else:
+                        try:
+                            v = float(inn.split(' ')[2])
+                        except:
+                            v = 0.0
+                        self.add_simple_lines(ion, v)
+                else:
+                    print 'You entered:',inn
+                    print 'I do not understand.'
+                    continue
+            elif 'z' in inn.lower():
+                inn = raw_input('\nenter a numerical redshift z\n')
+                try:
+                    newz = float(inn)
+                except:
+                    print 'You entered:',inn
+                    print 'I do not understand.'
+                    continue
+                self.modify_dopcor(newz)
+            elif 'r' in inn.lower():
+                inn = raw_input('\nenter the E(B-V) to deredden, or RA Dec (to use MW values)\n')
+                try:
+                    EBV = float(inn)
+                    self.deredden(EBV)
+                except:
+                    try:
+                        sra, sdec = [ss for ss in inn.split(' ') if ss]
+                        ra = parse_ra(sra)
+                        dec = parse_dec(sdec)
+                        self.deredden_gal(ra, dec)
+                    except:
+                        print 'You entered:',inn
+                        print 'I do not understand.'
+                        continue
+            elif 'c' in inn.lower():
+                inn = raw_input('\nenter the python code to run\n')
+                try:
+                    exec(inn)
+                except:
+                    print 'You entered:',inn
+                    print 'I do not understand.'
+                    continue
+            elif 'q' in inn.lower():
+                break
+            else:
+                print 'You entered:',inn
+                print 'I do not understand.'
+                continue
+                
+                
+
 
