@@ -262,6 +262,36 @@ def rebin1D( a, factor ):
     
     return np.hstack( (arr1, arr2) )
 
+def smooth( x, y, width=10.0, window='hanning' ):
+    '''
+    Smooth the input spectrum y (on wl x) with a <window> kernel
+     of width ~ width (in x units)
+    <window> options: 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
+    Returns the smoothed y array.
+    '''
+    if y.ndim != 1:
+        raise ValueError, "smooth only accepts 1 dimension arrays."
+    if x.size != y.size:
+        raise ValueError, "Input x,y vectors must be of same size"
+    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
+        raise ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
+    # find the best window length
+    avg_width = np.abs(np.mean(x[1:]-x[:-1]))
+    window_len = int(round(width/avg_width))
+    if y.size < window_len:
+        raise ValueError, "Input vector needs to be bigger than window size."
+    if window_len<3:
+        return y
+
+    s=np.r_[y[window_len-1:0:-1],y,y[-1:-window_len:-1]]
+
+    if window == 'flat': #moving average
+        w=np.ones(window_len,'d')
+    else:
+        w=eval('np.'+window+'(window_len)')
+
+    y=np.convolve(w/w.sum(),s,mode='valid')
+    return y[(window_len/2-1):-(window_len/2)]
 
 
 def rolling_window(a, window):
@@ -973,6 +1003,15 @@ class lookatme:
         plt.draw()
         self.run()
 
+    def reset(self):
+        self.fig.clf()
+        self.wl = self.orig_wl
+        self.fl = self.orig_fl
+        self.fig = pretty_plot_spectra(self.wl, self.fl, err=self.er, fig=self.fig)
+        self.leg = None
+        print 'clearing and redrawing spectrum'
+        plt.draw()
+
     def add_nist_lines(self, ion, v=0.0):
         try:
             print 'querying NIST for',ion,'lines'
@@ -1042,7 +1081,17 @@ class lookatme:
         plt.draw()
     
     def dredden_gal(self, ra, dec):
+        print 'dereddening MW: ra,dec =',ra, dec
         self.fl = dered.remove_galactic_reddening( ra, dec, self.wl, self.fl, verbose=True )
+        plt.clf()
+        self.fig = pretty_plot_spectra(self.wl, self.fl, err=self.er, fig=self.fig)
+        for ion in self.ion_lines.keys():
+            self.ion_lines.pop(ion)
+        plt.draw()
+
+    def smooth(self, width):
+        print 'smoothing. width:',width
+        self.fl = smooth(self.wl, self.fl, width)
         plt.clf()
         self.fig = pretty_plot_spectra(self.wl, self.fl, err=self.er, fig=self.fig)
         for ion in self.ion_lines.keys():
@@ -1058,7 +1107,9 @@ class lookatme:
                             ' l: add/remove ion lines to the plot\n'+\
                             ' z: deredshift the spectrum (removing any previous redshifts)\n'+\
                             ' r: deredden the spectrum (without removing any previous reddening)\n'+\
+                            ' s: smooth the spectrum\n'+\
                             ' c: execute a python command\n'+\
+                            ' u: undo everything and replot spectrum\n'+\
                             ' q: quit\n')
             if 'l' in inn.lower():
                 inn = raw_input('\nenter an ion name (e.g. "Fe II") and an optional blueshift velocity,'+\
@@ -1115,18 +1166,29 @@ class lookatme:
                         ra = parse_ra(sra)
                         dec = parse_dec(sdec)
                         self.deredden_gal(ra, dec)
-                    except:
+                    except Exception as e:
                         print 'You entered:',inn
-                        print 'I do not understand.'
+                        print 'I do not understand:\n',e
                         continue
+            elif 's' in inn.lower():
+                inn = raw_input('\nenter width of the smoothing window (A)\n')
+                try:
+                    self.smooth(float(inn))
+                except Exception as e:
+                    print 'You entered:',inn
+                    print 'I do not understand:\n',e
+                    continue
             elif 'c' in inn.lower():
                 inn = raw_input('\nenter the python code to run\n')
                 try:
                     exec(inn)
-                except:
+                except Exception as e:
                     print 'You entered:',inn
-                    print 'I do not understand.'
+                    print 'I do not understand:\n',e
                     continue
+            elif 'u' in inn.lower():
+                self.reset()
+                continue
             elif 'q' in inn.lower():
                 break
             else:
