@@ -170,11 +170,11 @@ def remove_galactic_reddening( ra, dec, wave, flux, R_V=3.1, verbose=False ):
     except:
         raise IOError('dust map error!')
     # coordinate-to-pixel mapping from the dust map fits header
-    X_pix = lambda l,b,pole: np.sqrt(1.-MAP_DICT[pole][1]*np.sin(b))*np.cos(l)*MAP_DICT[pole][2]
-    Y_pix = lambda l,b,pole: -MAP_DICT[pole][1]*np.sqrt(1.-MAP_DICT[pole][1]*np.sin(b))*np.sin(l)*MAP_DICT[pole][2]
+    X_pix = lambda l,b,pole: MAP_DICT[pole][2] * np.sqrt(1.-MAP_DICT[pole][1]*np.sin(b)) * np.cos(l) + 2047.5
+    Y_pix = lambda l,b,pole: -MAP_DICT[pole][2] * MAP_DICT[pole][1] * np.sqrt(1.-MAP_DICT[pole][1]*np.sin(b))*np.sin(l) + 2047.5 
     # get galactic coordinates with eq_gal, which does everything in radians
-    ra_rad = ra*(np.pi/180.)
-    dec_rad = dec*(np.pi/180.)
+    ra_rad = np.deg2rad(ra)
+    dec_rad = np.deg2rad(dec)
     l,b = eq_gal( 2000., ra_rad, dec_rad )
     if verbose: print 'RA, Dec: %.3f, %.3f --> l, b: %.3f, %.3f'%(ra,dec,l,b)
     if b>0:
