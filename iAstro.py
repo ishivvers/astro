@@ -22,16 +22,19 @@ try:
     from scipy.ndimage import percentile_filter
     from scipy.interpolate import UnivariateSpline
 except:
-    print 'iAstro: some packages did not load; some functions may not be available'
+    print 'iAstro: some scipy packages did not load; some functions may not be available'
 try:
     from jdcal import gcal2jd
 except:
-    print 'iAstro: some packages did not load; some functions may not be available'
+    print 'iAstro: jdcal did not load; some functions may not be available'
 try:
     import mechanize
 except:
-    print 'iAstro: some packages did not load; some functions may not be available'
-
+    print 'iAstro: mechanize did not load; some functions may not be available'
+try:
+    from astro import spectools
+except:
+    print 'iAstro: spectools did not load; some functions may not be available'
 
 class C:
     '''
@@ -291,7 +294,10 @@ def smooth( x, y, width=10.0, window='hanning' ):
         w=eval('np.'+window+'(window_len)')
 
     y=np.convolve(w/w.sum(),s,mode='valid')
-    return y[(window_len/2-1):-(window_len/2)]
+    yout = y[(window_len/2-1):-(window_len/2)]
+    if len(yout) != len(x):
+        yout = yout[:len(x)]
+    return yout
 
 
 def rolling_window(a, window):
@@ -975,6 +981,7 @@ class lookatme:
         else:
             self.dopcor = 0.0
         self.ion_lines = {}
+        self.fitted_lines = []
         self.ion_dict = {100:'H I', 200:'He I', 201:'He II', 300:'Li I', 301:'Li II', 400:'Be I',
                 401:'Be II', 402:'Be III', 500:'B I', 501:'B II', 502:'B III', 503:'B IV',
                 600:'C I', 601:'C II', 602:'C III', 603:'C IV', 700:'N I', 701:'N II',
@@ -1097,6 +1104,22 @@ class lookatme:
         for ion in self.ion_lines.keys():
             self.ion_lines.pop(ion)
         plt.draw()
+
+    def fit_line(self, xmid):
+        print 'fitting a line around',xmid
+        xx, yy, pc, yy2 = spectools.parameterize_line(self.wl, self.fl, xmid)
+        self.fitted_lines.append(plt.plot(xx,yy2,'r')[0])
+        self.fitted_lines.append(plt.plot(xx,pc,'k',lw=2)[0])
+        pew,wl_mid,rel_d,fwhm = spectools.calc_everything(self.wl, self.fl, xmid)
+        print ' pEW: %.3f\n wl_mid: %.3f\n rel_depth: %.3f\n FWHM: %.3f' %(pew,wl_mid,rel_d,fwhm)
+        plt.draw()
+
+    def remove_fitted_lines(self):
+        print 'removing all fitted lines'
+        for l in self.fitted_lines:
+            l.remove()
+        self.fitted_lines = []
+        plt.draw()
     
     def run(self):
         '''
@@ -1108,6 +1131,7 @@ class lookatme:
                             ' z: deredshift the spectrum (removing any previous redshifts)\n'+\
                             ' r: deredden the spectrum (without removing any previous reddening)\n'+\
                             ' s: smooth the spectrum\n'+\
+                            ' f: fit for a spectral line\n'+\
                             ' c: execute a python command\n'+\
                             ' u: undo everything and replot spectrum\n'+\
                             ' q: quit\n')
@@ -1178,6 +1202,18 @@ class lookatme:
                     print 'You entered:',inn
                     print 'I do not understand:\n',e
                     continue
+            elif 'f' in inn.lower():
+                inn = raw_input('hit enter, then click on the line to fit. Or enter "clear"'+\
+                                'to clear all lines\n')
+                if 'clear' in inn:
+                    self.remove_fitted_lines()
+                else:
+                    try:
+                        x,y = plt.ginput()[0]
+                        self.fit_line(x)
+                    except Exception as e:
+                        print 'something went wrong:',e
+                        continue
             elif 'c' in inn.lower():
                 inn = raw_input('\nenter the python code to run\n')
                 try:
