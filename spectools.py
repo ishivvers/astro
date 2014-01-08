@@ -2,6 +2,7 @@
 Spectral measurement tools.
 '''
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy.interpolate import UnivariateSpline
 
@@ -18,7 +19,7 @@ def fit_quad(x,y):
     # return best fit and parameters
     return quad(x,a,b,c), [a,b,c]
 
-def find_edge(x, y, xmid, side, width=100.0, plot=False):
+def find_edge(x, y, xmid, side, width=100.0, width2=10,  plot=False):
     '''
     Find the edge of a feature by searching for the
      maximum inflection point in a set of locally-fit quadratics.
@@ -26,6 +27,7 @@ def find_edge(x, y, xmid, side, width=100.0, plot=False):
     xmid: an x-coordinate inside the feature
     side: one of 'left','right','l','r'
     width: width (in x-coords) of fitting window
+    width2: width (in x-coords) of window to take average for y-value
     '''
     if side in ['l','left']:
         side = 'l'
@@ -46,7 +48,9 @@ def find_edge(x, y, xmid, side, width=100.0, plot=False):
         imax = np.argmax(ymod)
         if (imax != 0) and (imax != len(xx)-1):
             # we have an edge!
-            edge = ( xx[imax], ymod[imax] )
+            mask = (xx>xx[imax]-width2/2) & (xx<xx[imax]+width2/2)
+            yval = np.mean(yy[mask])
+            edge = ( xx[imax], yval )
             break
         if side=='l':
             xmid -= width/10.0
@@ -62,20 +66,23 @@ def find_edge(x, y, xmid, side, width=100.0, plot=False):
         plt.show()
     return edge
 
-def find_pcont(x, y, xmid, plot=False):
+def find_pcont(x, y, err, xmid, plot=False, width=100.0):
     '''
     Find and remove the pseudocontinuum for the line centered
      at xmid (x-coords) in the spectrum y on x.
+    <width> is the edge-window width in x-coords
     Returns the line and the pseudocontinuum (x, y, y_pc).
     '''
     # find the edges
-    l_edge = find_edge(x,y,xmid,'l')
-    r_edge = find_edge(x,y,xmid,'r')
+    l_edge = find_edge(x,y,xmid,'l', width=width)
+    r_edge = find_edge(x,y,xmid,'r', width=width)
     # calculate the line
     b = (r_edge[1]-l_edge[1])/(r_edge[0]-l_edge[0])
     a = l_edge[1] - b*l_edge[0]
-    xx = x[ (x>l_edge[0])&(x<r_edge[0]) ]
-    yy = y[ (x>l_edge[0])&(x<r_edge[0]) ]
+    mask = (x>l_edge[0])&(x<r_edge[0])
+    xx = x[ mask ]
+    yy = y[ mask ]
+    ee = err[ mask ]
     pc = a + b*xx
     if plot:
         plt.figure()
@@ -84,7 +91,7 @@ def find_pcont(x, y, xmid, plot=False):
         plt.scatter( [l_edge[0],r_edge[0]], [l_edge[1],r_edge[1]], marker='D', s=150, c='k', alpha=0.5)
         plt.title('pseudo-continuum fit')
         plt.show()
-    return xx, yy, pc
+    return xx, yy, ee, pc
 
 def pEW(x, y, pc):
     '''
@@ -151,37 +158,58 @@ def FWHM(x, y, peak_val=None, plot=False):
         plt.show()
     return edges[1] - edges[0]
 
-def parameterize_line(x, y, xmid, plot=False):
+def parameterize_line(x, y, err, xmid, plot=False, width=100.0, spline_smooth=None, line_container=None):
     '''
     Fit a functional form to the line centered at xmid in 
-     the spectrum y on x.
+     the spectrum y on x with errors err (all array-like).
+    <width> is the edge-window width in x-coords
+    <spline_smooth> defines the smoothing parameter for the spline based on the length of the wl array
+    <line_container> can be an object to append all plotted lines to, so they can be removed later
     Returns the line, the pseudocontinuum, the fit form, and the function
      (x, y, y_pc, y_fit, f(x))
     '''
-    xx, yy, pc = find_pcont(x, y, xmid)
-    spline = UnivariateSpline( xx, yy, k=5 )
+    if line_container != None:
+        lc = line_container
+    else:
+        lc = []
+    xx, yy, ee, pc = find_pcont(x, y, err, xmid, width=width)
+    if spline_smooth == None:
+        s = spline_smooth
+    else:
+        s = spline_smooth * len(xx)
+    # tried to incorporate error spectrum here, but for some reason it failed
+    spline = UnivariateSpline( xx, yy, k=5, s=s )
     yy2 = spline(xx)
 
     if plot:
-        plt.figure()
-        plt.plot(xx,yy,'b')
-        plt.plot(xx,yy2,'r')
-        plt.plot(xx,pc,'k',lw=2)
-        plt.title('paremeterized line and pseudocontinuum fit')
+        ls = plt.plot(xx,yy,'b')
+        for l in ls: lc.append(l)
+        ls = plt.plot(xx,yy2,'r')
+        for l in ls: lc.append(l)
+        ls = plt.plot(xx,pc,'k',lw=2)
+        for l in ls: lc.append(l)
         plt.show()
-    return xx, yy, pc, yy2
+    return xx, yy, ee, pc, yy2
 
-def calc_everything(x, y, xmid, plot=False):
+def calc_everything(x, y, err, xmid, plot=0, width=100.0, spline_smooth=None, line_container=None):
     '''
     Calculates properties of a the line centered at xmid in 
-     the spectrum y on x.
+     the spectrum y on x.  <plot> can be one of [0,1,2], to produce
+     different levels of plots. <width> is the width of the edge windows
+     used to fit for the continuum. <spline_smooth> is a factor that defines
+     the spline_smooth factor based on size of the wl array
     Returns:
      pEW
      wl_min
      rel_depth
      FWHM
     '''
-    xx, yy, pc, yy2 = parameterize_line(x,y,xmid,plot=plot)
+    if plot > 0:
+        p = True
+    else:
+        p = False
+    xx, yy, ee, pc, yy2 = parameterize_line(x,y,err,xmid, plot=p, width=width, spline_smooth=spline_smooth,
+                                        line_container=line_container)
     # the pseudo equivalent width
     pew = pEW(xx,yy,pc)
     # the wl of the minimum
@@ -191,6 +219,10 @@ def calc_everything(x, y, xmid, plot=False):
     relative = yy2/pc
     rel_depth = 1.0 - np.min(relative)
     # the FWHM
-    fwhm = FWHM(xx, relative, 1.0, plot=plot)
+    if plot > 1:
+        p = True
+    else:
+        p = False
+    fwhm = FWHM(xx, relative, 1.0, plot=p)
     return pew, wl_min, rel_depth, fwhm
 

@@ -6,11 +6,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.gaussian_process import GaussianProcess
 
-def gp_lc_fit(t, m, e, npoints=10000, plot=True):
+def gp_lc_fit(t, m, e, npoints=10000, plot=True, theta=0.15):
     '''
     Use Gaussian process regression to fit a functional
      form to a supernova lightcurve.
     t, m, e: 1D arrays for time, mag, and error
+    theta: the autcorrelation timescale parameter. If the model needs to have more
+            flexture, increase theta.  If it needs less, decrease theta.
     returns: t, mag, err arrays of size npoints
     '''
     edge = 1.0  # predict beyond the data by this amount on either side
@@ -21,7 +23,7 @@ def gp_lc_fit(t, m, e, npoints=10000, plot=True):
     x = np.atleast_2d( np.linspace(t[0]-edge, t[-1]+edge, npoints)).T
     xf = x.flatten()
 
-    gp = GaussianProcess(regr='constant', nugget=(e/y)**2, theta0=.15)
+    gp = GaussianProcess(regr='linear', nugget=(e/y)**2, theta0=theta)
     gp.fit(X,y)
     y_pred, MSE = gp.predict(x, eval_MSE=True)
     ep = MSE**.5  # prediction error estimate

@@ -21,6 +21,7 @@ try:
     from scipy.optimize import curve_fit
     from scipy.ndimage import percentile_filter
     from scipy.interpolate import UnivariateSpline
+    from scipy.ndimage import generic_filter
 except:
     print 'iAstro: some scipy packages did not load; some functions may not be available'
 try:
@@ -298,6 +299,23 @@ def smooth( x, y, width=10.0, window='hanning' ):
     if len(yout) != len(x):
         yout = yout[:len(x)]
     return yout
+
+def estimate_noise( x, y, plot=False, factor=20 ):
+    '''
+    Estimate the noise (and therefore error) of the spectrum as 
+     a function of wavelength by subtracting a smoothed spectrum.
+    '''
+    res = np.mean( x[1:] - x[:-1] )
+    model = smooth( x, y, factor*res )
+    err = generic_filter( y-model, np.std, int(factor*res) )
+    if plot:
+        plt.figure()
+        plt.plot(x,y,'k')
+        plt.plot(x,model,'b')
+        plt.plot(x,err,'r')
+        plt.title('Data, smoothed model, and error estimate.')
+        plt.show()
+    return err
 
 
 def rolling_window(a, window):
@@ -1027,7 +1045,7 @@ class lookatme:
             color = allcolors[ np.random.randint(len(allcolors)) ]
             print 'adding',color,'lines for',ion,'at velocity',v
             wls = wls - wls*(v/3e5)
-            self.ion_lines[ion] = plt.vlines( wls, ymin, ymax, linestyles='dotted', color=color, label=ion )
+            self.ion_lines[ion] = plt.vlines( wls, ymin, ymax, linestyles='dashed', lw=2, color=color, label=ion )
             self.leg = plt.legend(fancybox=True, loc='best' )
             self.leg.get_frame().set_alpha(0.0)
             plt.draw()
@@ -1041,7 +1059,7 @@ class lookatme:
             color = allcolors[ np.random.randint(len(allcolors)) ]
             print 'adding',color,'lines for',ion,'at velocity',v
             wls = wls - wls*(v/3e5)
-            self.ion_lines[ion] = plt.vlines( wls, ymin, ymax, linestyles='dotted', color=color, label=ion )
+            self.ion_lines[ion] = plt.vlines( wls, ymin, ymax, linestyles='dashed', lw=2, color=color, label=ion )
             self.leg = plt.legend(fancybox=True, loc='best' )
             self.leg.get_frame().set_alpha(0.0)
             plt.draw()
