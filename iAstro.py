@@ -1125,10 +1125,10 @@ class lookatme:
 
     def fit_line(self, xmid):
         print 'fitting a line around',xmid
-        xx, yy, pc, yy2 = spectools.parameterize_line(self.wl, self.fl, xmid)
+        xx, yy, ee, pc, yy2 = spectools.parameterize_line(self.wl, self.fl, self.er, xmid)
         self.fitted_lines.append(plt.plot(xx,yy2,'r')[0])
         self.fitted_lines.append(plt.plot(xx,pc,'k',lw=2)[0])
-        pew,wl_mid,rel_d,fwhm = spectools.calc_everything(self.wl, self.fl, xmid)
+        pew,wl_mid,rel_d,fwhm = spectools.calc_everything(self.wl, self.fl, self.er, xmid)
         print ' pEW: %.3f\n wl_mid: %.3f\n rel_depth: %.3f\n FWHM: %.3f' %(pew,wl_mid,rel_d,fwhm)
         plt.draw()
 
@@ -1221,7 +1221,7 @@ class lookatme:
                     print 'I do not understand:\n',e
                     continue
             elif 'f' in inn.lower():
-                inn = raw_input('hit enter, then click on the line to fit. Or enter "clear"'+\
+                inn = raw_input('hit enter, then click on the line to fit. Or enter "clear" '+\
                                 'to clear all lines\n')
                 if 'clear' in inn:
                     self.remove_fitted_lines()

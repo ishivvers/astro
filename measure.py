@@ -3,7 +3,10 @@ Class used to measure the properties of
  SN spectra.
 
 to do: 
- - feed through parameter changes for PC fitting
+ - have smart autonomous parameter fitting:
+  - if slope of line is very steep, or width of line is very small or very large,
+     try having a wider edge and narrower edge
+  - if that does not fix it, throw away line as bad
 '''
 
 import matplotlib.pyplot as plt
@@ -31,15 +34,10 @@ class measurer():
         'Fe III': [4397, 4421, 4432, 5129, 5158], '[O I]':[6300, 6364] }
     phot_lines = {'H I': [4341, 4861, 6563],
         'He I': [4472, 5876, 6678, 7065],
+        'O I': [np.mean([7772, 7774, 7775])],
+        'Mg II': [4481],
         'Ca II': [np.mean([3934, 3969]), np.mean([8498, 8542, 8662])],
         'Fe II': [5018, 5169]}
-    neb_lines = {'[O I]': [np.mean([6300, 6364])],
-        'O I': [7774],
-        '[Ca II]': [np.mean([7291,7324])],
-        'H I': [4341, 4861, 6563],
-        'He I': [5876, 6678, 7065],
-        'Na I': [np.mean([5890, 5896])],
-        'Mg I]':[4571]}
     
     colors = ['r','c','m','y','k','b','g','r','c','m']
     
@@ -99,7 +97,7 @@ class measurer():
         for ion in lines.keys():
             for i,wl in enumerate(lines[ion]):
                 try:
-                    if self.verbose: print 'fitting for',ion,wl
+                    if self.verbose: print 'fitting for',ion,round(wl,2)
                     plot_lines = []
                     res = calc_everything(self.wl, self.fl, self.er, wl - wl*(v/3e5), 
                                           plot=1, width=edge_width, spline_smooth=smoothing_factor,
@@ -111,7 +109,8 @@ class measurer():
                                  'rel_depth':res[2], 'FWHM':res[3]}
                     self.fitted_lines[self.line_counter] = line_dict
                     self.add_lines({'%d - '%self.line_counter+ion : res[1]}, v=0.0, line_container=plot_lines)
-                    plot_lines.append(plt.annotate(str(self.line_counter), (res[1]+10,self.ymax-1), color='k', size=16))
+                    plot_lines.append(plt.annotate(str(self.line_counter),
+                                     (res[1]+10,self.ymax-0.1*self.ymax), color='k', size=16))
                     self.plotted_lines[self.line_counter] = plot_lines
                 except:
                     if self.verbose: print 'no',ion,'line at',wl

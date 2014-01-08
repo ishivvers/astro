@@ -19,7 +19,7 @@ def fit_quad(x,y):
     # return best fit and parameters
     return quad(x,a,b,c), [a,b,c]
 
-def find_edge(x, y, xmid, side, width=100.0, width2=10,  plot=False):
+def find_edge(x, y, xmid, side, width=100.0, width2=20,  plot=False):
     '''
     Find the edge of a feature by searching for the
      maximum inflection point in a set of locally-fit quadratics.
@@ -48,8 +48,13 @@ def find_edge(x, y, xmid, side, width=100.0, width2=10,  plot=False):
         imax = np.argmax(ymod)
         if (imax != 0) and (imax != len(xx)-1):
             # we have an edge!
-            mask = (xx>xx[imax]-width2/2) & (xx<xx[imax]+width2/2)
-            yval = np.mean(yy[mask])
+            if side == 'l':
+                mask = (xx>xx[imax]) & (xx<xx[imax]+width2)
+            else:
+                mask = (xx>xx[imax]-width2) & (xx<xx[imax])
+            # use a high percentile of the region inside the feature near the edge
+            #  to define our y value for the edge of the feature.
+            yval = np.percentile(yy[mask], 90)
             edge = ( xx[imax], yval )
             break
         if side=='l':
@@ -82,7 +87,10 @@ def find_pcont(x, y, err, xmid, plot=False, width=100.0):
     mask = (x>l_edge[0])&(x<r_edge[0])
     xx = x[ mask ]
     yy = y[ mask ]
-    ee = err[ mask ]
+    if err != None:
+        ee = err[ mask ]
+    else:
+        ee = None
     pc = a + b*xx
     if plot:
         plt.figure()
@@ -158,13 +166,16 @@ def FWHM(x, y, peak_val=None, plot=False):
         plt.show()
     return edges[1] - edges[0]
 
-def parameterize_line(x, y, err, xmid, plot=False, width=100.0, spline_smooth=None, line_container=None):
+def parameterize_line(x, y, err, xmid, plot=False, width=100.0, spline_smooth=None, line_container=None,
+                      test_fit=False, xyrange=None):
     '''
     Fit a functional form to the line centered at xmid in 
      the spectrum y on x with errors err (all array-like).
     <width> is the edge-window width in x-coords
     <spline_smooth> defines the smoothing parameter for the spline based on the length of the wl array
     <line_container> can be an object to append all plotted lines to, so they can be removed later
+    If <test_fit>, this attempts a few sanity checks on the line to discard bad fits, and <xyrange> must
+     be a tuple with the xrange and yrange of the full spectrum.
     Returns the line, the pseudocontinuum, the fit form, and the function
      (x, y, y_pc, y_fit, f(x))
     '''
@@ -172,14 +183,57 @@ def parameterize_line(x, y, err, xmid, plot=False, width=100.0, spline_smooth=No
         lc = line_container
     else:
         lc = []
-    xx, yy, ee, pc = find_pcont(x, y, err, xmid, width=width)
     if spline_smooth == None:
         s = spline_smooth
     else:
-        s = spline_smooth * len(xx)
-    # tried to incorporate error spectrum here, but for some reason it failed
-    spline = UnivariateSpline( xx, yy, k=5, s=s )
-    yy2 = spline(xx)
+        s = spline_smooth * len(x)
+    if test_fit and type(xyrange)!=tuple:
+        raise Exception('If test_fit is true, must include measures of full spectral range.')
+    
+    # run sanity checks
+    attempts = 0
+    max_slope = 3.5      # max slope of pseudocontinuum, relative to width of full spectrum
+    max_width = 30000.0  # max width of feature in km/s
+    min_width = 5000.0   # min width of feature in km/s
+    max_offset = 15000.0 # max central velocity offset of feature in km/s
+    while True:
+        xx, yy, ee, pc = find_pcont(x, y, err, xmid, width=width)
+        spline = UnivariateSpline( xx, yy, k=5, s=s )
+        yy2 = spline(xx)
+        if attempts > 3:
+            raise Exception('Could not successfully fit line!')
+        elif test_fit:
+            ss = ((max(pc)-min(pc))/xyrange[1]) / ((max(xx)-min(xx))/xyrange[0])
+            ww = 3e5 * (max(xx)-min(xx))/xmid
+            os = 3e5 * np.abs( (xx[np.argmin(yy2)]) - xmid ) / xmid
+            if ss > max_slope:
+                print 'slope too steep'
+                # if slope is too steep, try making the edge width bigger
+                width *= 1.5
+                attempts += 1
+                continue
+            elif ww > max_width:
+                print 'feature too wide'
+                # if feature is too wide, try making the edge width smaller
+                width *= (2./3)
+                attempts += 1
+                continue
+            elif ww < min_width:
+                print 'feature too narrow'
+                # if feature is too narrow, try making the edge width bigger
+                width *= 1.5
+                attempts += 1
+                continue
+            elif os > max_offset:
+                print 'feature too far offset from center'
+                # probably chose the wrong feature; try making the edge width smaller
+                width *= (2./3)
+                attempts += 1
+                continue
+            else:
+                break
+        else:
+            break
 
     if plot:
         ls = plt.plot(xx,yy,'b')
@@ -197,7 +251,7 @@ def calc_everything(x, y, err, xmid, plot=0, width=100.0, spline_smooth=None, li
      the spectrum y on x.  <plot> can be one of [0,1,2], to produce
      different levels of plots. <width> is the width of the edge windows
      used to fit for the continuum. <spline_smooth> is a factor that defines
-     the spline_smooth factor based on size of the wl array
+     the spline_smooth factor based on size of the wl array.
     Returns:
      pEW
      wl_min
@@ -208,8 +262,10 @@ def calc_everything(x, y, err, xmid, plot=0, width=100.0, spline_smooth=None, li
         p = True
     else:
         p = False
+    # xyrange = (np.max(x)-np.min(x), np.max(y)-np.min(y))
+    xyrange = (6000, np.max(y)-np.min(y)) # use a fixed wl range, so that the sanity checks aren't dependant on wl range
     xx, yy, ee, pc, yy2 = parameterize_line(x,y,err,xmid, plot=p, width=width, spline_smooth=spline_smooth,
-                                        line_container=line_container)
+                                        line_container=line_container, test_fit=True, xyrange=xyrange)
     # the pseudo equivalent width
     pew = pEW(xx,yy,pc)
     # the wl of the minimum
