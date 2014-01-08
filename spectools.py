@@ -19,7 +19,7 @@ def fit_quad(x,y):
     # return best fit and parameters
     return quad(x,a,b,c), [a,b,c]
 
-def find_edge(x, y, xmid, side, width=100.0, width2=20,  plot=False):
+def find_edge(x, y, xmid, side, width=100.0,  plot=False):
     '''
     Find the edge of a feature by searching for the
      maximum inflection point in a set of locally-fit quadratics.
@@ -27,7 +27,6 @@ def find_edge(x, y, xmid, side, width=100.0, width2=20,  plot=False):
     xmid: an x-coordinate inside the feature
     side: one of 'left','right','l','r'
     width: width (in x-coords) of fitting window
-    width2: width (in x-coords) of window to take average for y-value
     '''
     if side in ['l','left']:
         side = 'l'
@@ -38,8 +37,9 @@ def find_edge(x, y, xmid, side, width=100.0, width2=20,  plot=False):
     edge = None
 
     while True:
-        xx = x[ (x > xmid-width/2)&(x < xmid+width/2) ]
-        yy = y[ (x > xmid-width/2)&(x < xmid+width/2) ]
+        mask = (x > xmid-width/2)&(x < xmid+width/2)
+        xx = x[ mask ]
+        yy = y[ mask ]
         ymod = fit_quad(xx,yy)[0]
         # test to see if we've moved past one of the edges
         if (xx[-1] < x[0]+width/2) or (xx[0] > x[-1]-width/2):
@@ -48,13 +48,9 @@ def find_edge(x, y, xmid, side, width=100.0, width2=20,  plot=False):
         imax = np.argmax(ymod)
         if (imax != 0) and (imax != len(xx)-1):
             # we have an edge!
-            if side == 'l':
-                mask = (xx>xx[imax]) & (xx<xx[imax]+width2)
-            else:
-                mask = (xx>xx[imax]-width2) & (xx<xx[imax])
             # use a high percentile of the region inside the feature near the edge
             #  to define our y value for the edge of the feature.
-            yval = np.percentile(yy[mask], 90)
+            yval = np.percentile(yy, 90)
             edge = ( xx[imax], yval )
             break
         if side=='l':
