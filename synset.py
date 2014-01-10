@@ -113,6 +113,9 @@ class SynSet():
         self.verbose = verbose
         self.gui_debug = gui_debug
         self.ion_lines = {}
+        self.nproc = None
+        # set the number of threads to use with synapps
+        self.handle_OMP()
         if self.verbose: print 'running syn++'
         if not self.gui_debug:
             res = Popen( synp_cmd+' '+yaml_file, shell=True, stderr=PIPE, stdout=PIPE )
@@ -120,9 +123,33 @@ class SynSet():
             if e:
                 raise Exception('Error running SYN++: '+e)
             self.synspec = np.array([ map(float,[l.split(' ')[0],l.split(' ')[1]]) for l in o.strip().split('\n') ])
-        # build up the figure
+        # build up the figure and go
         self._build_figure(newfig=True, current_calc=True)
-        
+
+    def close(self):
+        # restore the number of threads to the previous value
+        self.handle_OMP()
+    
+    def handle_OMP(self):
+        '''
+        Manage the setting of OMP_NUM_THREADS to most efficiently
+        utilize parallelization.
+        '''
+        if self.verbose: print 'handling OMP_NUM_THREADS bash variable'
+        if self.nproc == None:
+            # on init, the variable is not set
+            self.nproc, e = Popen("nproc --all",shell=True,stdout=PIPE).communicate()
+            try:
+                self.OMP = os.environ['OMP_NUM_THREADS']
+            except KeyError:
+                self.OMP = None
+            os.environ['OMP_NUM_THREADS'] = self.nproc
+        else:
+            if self.OMP != None:
+                # restore the bash variable to its original state
+                os.environ['OMP_NUM_THREADS'] = self.OMP
+
+
     def _build_figure(self, newfig=False, current_calc=False):
         if self.verbose: print 'creating figure'
         # the spectral plot
@@ -378,4 +405,4 @@ if __name__ == '__main__':
     
     S = SynSet( sys.argv[-2], sys.argv[-1] )
     plt.show()
-
+    S.close()

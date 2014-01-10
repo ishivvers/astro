@@ -1,4 +1,4 @@
-##!/usr/bin/env python
+#!/usr/bin/env python
 """
 A command-line program that produces a live plot of the progress
  of a SYNAPPS task.  Requires the path to the yaml of the running
@@ -35,6 +35,13 @@ ion_dict = {100:'H I', 200:'He I', 201:'He II', 300:'Li I', 301:'Li II', 400:'Be
             2702:'Co III', 2703:'Co IV', 2800:'Ni I', 2801:'Ni II', 2802:'Ni III', 2803:'Ni IV',
             2901:'Cu II', 3002:'Zn III', 3801:'Sr II', 5600:'Ba I', 5601:'Ba II'}
 
+def set_OMP():
+    '''
+    Manage the setting of OMP_NUM_THREADS to most efficiently
+    utilize parallelization.
+    '''
+    nproc, e = Popen("nproc --all",shell=True,stdout=PIPE).communicate()
+    os.environ['OMP_NUM_THREADS'] = nproc
 
 def parse_log( yaml_file, log_file, nlines=3, stepsize=1 ):
     '''
@@ -214,6 +221,7 @@ if __name__ == '__main__':
     except:
         raise Exception('Usage: synwatch <synapps.yaml.file> <synapps.running.log> <refresh interval (minutes)>')
     
+    set_OMP()
     plt.ion()
     fig = plt.figure( figsize=(12,8) )
     nframe = 0

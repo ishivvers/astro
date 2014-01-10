@@ -15,6 +15,7 @@ from matplotlib import colors
 allcolors = [c for c in colors.cnames.keys() if ('dark' in c) or ('medium') in c ] +\
              'r g b c m k'.split()
 import re
+import pyfits
 from astro import dered
 # looks like some versions of my python don't have the newest SciPY, so here's a hack
 try:
@@ -1250,6 +1251,24 @@ class lookatme:
                 print 'I do not understand.'
                 continue
                 
-                
+def open_multispec_fits(f):
+    '''
+    Opens a fits file created by MULTIFITS, returning
+     arrays for wl, flux, error, and background.
+    '''
+    hdu = pyfits.open(f)[0]
+    h = hdu.header
+    d = hdu.data
+    # make the wl array
+    try:
+        assert( 'linear' in h['WAT1_001'].lower() )
+    except:
+        raise ValueError('Wavelength not linear!')
+    wl = np.linspace(h['xmin'], h['xmax'], d.shape[-1])
+    fl = d[0,0,:]
+    er = d[3,0,:]
+    bg = d[2,0,:]
+    
+    return wl,fl,er,bg
 
 
