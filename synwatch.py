@@ -120,8 +120,8 @@ def parse_log( yaml_file, log_file, nlines=3, stepsize=1 ):
         setup.v_outer = synapps.config.v_outer.start
         setup.t_phot  = synapps.config.t_phot.start
         for i, ion in enumerate( synapps.config.ions ) :
-            setup.ions.append( Synpp.Ion( ion.ion, ion.active, ion.log_tau.start, ion.v_min.start, ion.v_max.start, ion.aux.start, ion.temp.start ) )
-        
+            if synapps.config.ions[ i ].active:
+                setup.ions.append( Synpp.Ion( ion.ion, ion.active, ion.log_tau.start, ion.v_min.start, ion.v_max.start, ion.aux.start, ion.temp.start ) )    
         setups.append(setup)
         
     return str(Synpp.Synpp( output, grid, opacity, source, spectrum, [setups[0]] )), setups, synapps.evaluator.target_file

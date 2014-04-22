@@ -192,16 +192,25 @@ def parameterize_line(x, y, err, xmid, plot=False, width=100.0, spline_smooth=No
     max_width = 30000.0  # max width of feature in km/s
     min_width = 5000.0   # min width of feature in km/s
     max_offset = 15000.0 # max central velocity offset of feature in km/s
+    min_depth = 1.0      # minimum depth of line in standard deviations
+    max_attempts = 3     # max number of adjustments to make when trying to fit the line
     while True:
+        if attempts > max_attempts:
+            raise AssertionError('Could not successfully fit line at %.2f.'%xmid)
         xx, yy, ee, pc = find_pcont(x, y, err, xmid, width=width)
+        if len(xx) == 0:
+            print 'cannot determine the continuum'
+            # try making the edge width bigger
+            width *= 1.5
+            attempts += 1
+            continue
         spline = UnivariateSpline( xx, yy, k=5, s=s )
         yy2 = spline(xx)
-        if attempts > 3:
-            raise Exception('Could not successfully fit line!')
-        elif test_fit:
+        if test_fit:
             ss = ((max(pc)-min(pc))/xyrange[1]) / ((max(xx)-min(xx))/xyrange[0])
             ww = 3e5 * (max(xx)-min(xx))/xmid
             os = 3e5 * np.abs( (xx[np.argmin(yy2)]) - xmid ) / xmid
+            depth = np.max(pc-yy2)
             if ss > max_slope:
                 print 'slope too steep'
                 # if slope is too steep, try making the edge width bigger
@@ -224,6 +233,18 @@ def parameterize_line(x, y, err, xmid, plot=False, width=100.0, spline_smooth=No
                 print 'feature too far offset from center'
                 # probably chose the wrong feature; try making the edge width smaller
                 width *= (2./3)
+                attempts += 1
+                continue
+            elif depth < min_depth * np.std(yy):
+                print 'feature too shallow'
+                # try widening the feature
+                width *= 1.5
+                attempts += 1
+                continue
+            elif (np.argmin(yy2) == 0) or (np.min(yy2) == len(yy2)-1):
+                print 'bad parameterization'
+                # this happens if one of the edges is the minimum
+                width *= 1.5
                 attempts += 1
                 continue
             else:
@@ -264,8 +285,8 @@ def calc_everything(x, y, err, xmid, plot=0, width=100.0, spline_smooth=None, li
                                         line_container=line_container, test_fit=True, xyrange=xyrange)
     # the pseudo equivalent width
     pew = pEW(xx,yy,pc)
-    # the wl of the minimum
-    imin = np.argmin(yy2)
+    # the wl of the minimum, where the minimum is the largest distance between pseudocontinuum and fit
+    imin = np.argmax(pc-yy2)
     wl_min = xx[imin]
     # the relative depth of the feature
     relative = yy2/pc

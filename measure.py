@@ -2,11 +2,18 @@
 Class used to measure the properties of 
  SN spectra.
 
-to do: 
- - have smart autonomous parameter fitting:
-  - if slope of line is very steep, or width of line is very small or very large,
-     try having a wider edge and narrower edge
-  - if that does not fix it, throw away line as bad
+- set it up to handle nebular spectra, allowing user to switch between the two,
+  but with a first guess based on the phase of the spectrum givin the observation
+  date.
+- have it record the phase along with the line properties for everything.
+- by group lunch, have a simple plot of photospheric line properties for a few
+  different lines and also a set of nebular line properties for a few.
+
+- for phot spectra, have an autonomous way of removing galaxy emission lines
+  (best way, fit with errors and smash up the errors around galaxy lines)
+
+- do not allow overlapping lines
+- have a minimum depth constraint
 '''
 
 import matplotlib.pyplot as plt
@@ -15,6 +22,8 @@ import numpy as np
 import re
 from astro.spectools import calc_everything
 from astro.iAstro import pretty_plot_spectra
+from jdcal import jd2gcal
+from datetime import datetime, timedelta
 import pickle
 
 class measurer():
@@ -38,8 +47,16 @@ class measurer():
         'Mg II': [4481],
         'Ca II': [np.mean([3934, 3969]), np.mean([8498, 8542, 8662])],
         'Fe II': [5018, 5169]}
-    
+    neb_lines = {'H I': [3970, 4102, 4341, 4861, 6563], 'He I': [3886, 4472, 5876, 6678, 7065],
+        'O I': [7772, 7774, 7775, 8447, 9266], 'Na I': [5890, 5896, 8183, 8195],
+        'Ca II': [np.mean([3934, 3969]), np.mean([8498, 8542, 8662])],
+        'Fe II': [5018, 5169, 7155], '[O I]':[6300, 6364],
+        '[Ca II]':[7291,7324], 'Mg I]':[4571]}
     colors = ['r','c','m','y','k','b','g','r','c','m']
+    # the location of the LC peak info file
+    LC_peak_info_file = '/Users/isaac/Working/code/se-ccsne/data/peak_info.txt'
+    
+    
     
     ###############################################################
     
@@ -60,10 +77,18 @@ class measurer():
             self.wl,self.fl = np.loadtxt(f,unpack=True)
             self.er = None
         # pull out the object name, matching ptf or IAU filename
-        self.name = re.search( '([sS][nN]\d{4}[a-zA-Z]+)|([Pp][Tt][Ff]\d{2}[a-zA-Z]+)', f).group() 
+        self.name = re.search( '(\d{4}[a-zA-Z]+)|([Pp][Tt][Ff]\d{2}[a-zA-Z]+)', f).group() 
         self.datestring = re.search('\d{8}\.?\d*', f).group()
+        
         self.fitted_lines = {} # keeps track of line properties
         self.plotted_lines = {} # keeps track of what's on the plot
+        
+        ### Calculate phase, and see if this is a phot or nebular spectrum ###
+        self.find_phase()
+        if self.phase < 60.0:
+            self.type = 'phot'
+        else:
+            self.type = 'neb'
         
         ### Run the fitting routine ###
         self.simple_plot()
@@ -78,6 +103,48 @@ class measurer():
         self.ymin, self.ymax = plt.axis()[2:]
         plt.title(self.name)
     
+    def find_phase(self):
+        '''
+        Find phase of this spectrum based on the datestring in the filename
+         and the records
+        '''
+        lines = [l for l in open(self.LC_peak_info_file,'r').readlines() if l[0]!='#']
+        found = False
+        for line in lines:
+            if self.name in line:
+                try:
+                    jd = float(re.search('24\d{5}\.\d*', line).group())
+                except:
+                    if self.verbose: print 'no peak date for',self.name
+                    self.phase = None
+                    return
+                found = True
+                break
+        if not found:
+            if self.verbose: print 'no peak date for',self.name
+            self.phase = None
+            return
+        
+        mjd = jd - 2400000.5
+        y,m,d,fracday = jd2gcal( 2400000.5, mjd ) # year, month, day, fracday
+        peaktime = datetime( y, m, d, int(fracday*24) ) # to hour resolution
+        
+        y = int(self.datestring[:4])
+        m = int(self.datestring[4:6])
+        d = int(self.datestring[6:8])
+        try:
+            fracday = float(re.search('\.\d+',self.datestring).group())
+        except:
+            fracday = 0.0
+        obstime = datetime( y, m, d, int(fracday*24) ) # to hour resolution
+        
+        # record the phase in days
+        time_diff = obstime-peaktime
+        self.phase = time_diff.total_seconds() / (60*60*24)
+        if self.verbose: print 'phase of spectrum: %.2f' %self.phase
+        
+        
+    
     def fit_lines(self, lines=None, edge_width=None, smoothing_factor=None, v=None):
         '''
         Fit for the properties of spectral lines.
@@ -87,7 +154,10 @@ class measurer():
          <smoothing_factor>: 0 to interpolate directly, len(spectra) is default
         '''
         if lines == None:
-            lines = self.phot_lines
+            if self.type == 'phot':
+                lines = self.phot_lines
+            elif self.type == 'neb':
+                lines = self.neb_lines
         if edge_width == None:
             edge_width = self.edge_width
         if smoothing_factor == None:
@@ -97,7 +167,7 @@ class measurer():
         for ion in lines.keys():
             for i,wl in enumerate(lines[ion]):
                 try:
-                    if self.verbose: print 'fitting for',ion,round(wl,2)
+                    if self.verbose: print 'fitting for',ion,round(wl,2),'at',round(wl - wl*(v/3e5),2)
                     plot_lines = []
                     res = calc_everything(self.wl, self.fl, self.er, wl - wl*(v/3e5), 
                                           plot=1, width=edge_width, spline_smooth=smoothing_factor,
