@@ -960,9 +960,6 @@ def query_nist(ion, low_wl, upp_wl, n_out=20):
 class lookatme:
     '''
     A tool to look at the properties of a SN spectrum.
-    
-    To Do: pick subset of MPL colors to use
-           insert a legend w/ no box with SN label as well as any lines, if present
     '''
 
     def __init__(self, wl, fl, er=None, deredden=None, dez=None):
@@ -1020,8 +1017,12 @@ class lookatme:
                 'He II': [3203, 4686], 'Mg II': [2791, 2796, 2803, 4481], 'O I': [7772, 7774, 7775, 8447, 9266],
                 'Si II': [3856, 5041, 5056, 5670, 6347, 6371], 'O II': [3727],
                 'Ca II': [3934, 3969, 7292, 7324, 8498, 8542, 8662], 'O III': [4959, 5007],
-                'Fe II': [5018, 5169], 'S II': [5433, 5454, 5606, 5640, 5647, 6715],
-                'Fe III': [4397, 4421, 4432, 5129, 5158], '[O I]':[6300, 6364]}
+                'Fe II': [5018, 5169, 7155], 'S II': [5433, 5454, 5606, 5640, 5647, 6715],
+                'Fe III': [4397, 4421, 4432, 5129, 5158], '[O I]':[6300, 6364],
+                '[Ca II]':[7291,7324], 'Mg I]':[4571] }
+        # use a subset of mpl colors 
+        self.allcolors = [c for c in colors.cnames.keys() if ('dark' in c) or ('medium') in c ] +\
+                          'r g b c m k'.split()
         plt.ion()
         self.fig = pretty_plot_spectra(self.wl, self.fl, err=self.er)
         self.leg = None
@@ -1043,7 +1044,7 @@ class lookatme:
             print 'querying NIST for',ion,'lines'
             wls, aks = query_nist(ion, np.min(self.wl), np.max(self.wl))
             ymin,ymax = plt.axis()[2:]
-            color = allcolors[ np.random.randint(len(allcolors)) ]
+            color = self.allcolors[ np.random.randint(len(self.allcolors)) ]
             print 'adding',color,'lines for',ion,'at velocity',v
             wls = wls - wls*(v/3e5)
             self.ion_lines[ion] = plt.vlines( wls, ymin, ymax, linestyles='dashed', lw=2, color=color, label=ion )
@@ -1057,7 +1058,7 @@ class lookatme:
         try:
             wls = np.array(self.simple_lines[ion])
             ymin,ymax = plt.axis()[2:]
-            color = allcolors[ np.random.randint(len(allcolors)) ]
+            color = self.allcolors[ np.random.randint(len(self.allcolors)) ]
             print 'adding',color,'lines for',ion,'at velocity',v
             wls = wls - wls*(v/3e5)
             self.ion_lines[ion] = plt.vlines( wls, ymin, ymax, linestyles='dashed', lw=2, color=color, label=ion )
@@ -1161,34 +1162,25 @@ class lookatme:
                     self.remove_lines( self.ion_lines.keys() )
                 elif 'nist' in inn:
                     inn = raw_input('\nenter an ion name (e.g. "Fe II") and an optional blueshift velocity.\n')
-                    if ' '.join(inn.split(' ')[:2]) in self.ion_dict.values():
-                        ion = ' '.join(inn.split(' ')[:2])
-                    else:
-                        print 'You entered:',inn
-                        print 'I do not understand.'
-                        continue
+                    ion = re.search('[^0-9]+', inn).group().strip()
                     if ion in self.ion_lines.keys():
                         self.remove_lines(ion)
                     else:
                         try:
-                            v = float(inn.split(' ')[2])
+                            v = float(re.search('[0-9]+', inn).group())
                         except:
                             v = 0.0
                         self.add_nist_lines(ion, v)
-                elif ' '.join(inn.split(' ')[:2]) in self.simple_lines.keys():
-                    ion = ' '.join(inn.split(' ')[:2])
+                else:
+                    ion = re.search('[^0-9]+', inn).group().strip()
                     if ion in self.ion_lines.keys():
                         self.remove_lines(ion)
                     else:
                         try:
-                            v = float(inn.split(' ')[2])
+                            v = float(re.search('[0-9]+', inn).group())
                         except:
                             v = 0.0
                         self.add_simple_lines(ion, v)
-                else:
-                    print 'You entered:',inn
-                    print 'I do not understand.'
-                    continue
             elif 'z' in inn.lower():
                 inn = raw_input('\nenter a numerical redshift z\n')
                 try:
