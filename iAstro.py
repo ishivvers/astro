@@ -19,6 +19,7 @@ import pyfits
 from astro import dered
 # looks like some versions of my python don't have the newest SciPY, so here's a hack
 try:
+    from scipy.integrate import trapz
     from scipy.optimize import curve_fit
     from scipy.ndimage import percentile_filter
     from scipy.interpolate import UnivariateSpline
@@ -372,11 +373,11 @@ def ngpl( *params ):
     for i in 3*np.arange(n):
         out += gauss(x, params[4+i], params[4+i+1], params[4+i+2])
     return out
-def fit_gaussian( x, y, interactive=False, plot=True, floor=True ):
+def fit_gaussian( x, y, interactive=False, plot=True, floor=True, p0={} ):
     '''
     Fit a straight line plus a single 1D Gaussian profile to the array y on x.
-    Returns the array of the best-fit Gaussian on x, as well
-     as the parameters of the best-fit Gaussian.
+    Returns a dictionary of the best-fit parameters and the numerical array of the
+     best fit.
      
     Options:
      interactive=[False,True]
@@ -391,6 +392,9 @@ def fit_gaussian( x, y, interactive=False, plot=True, floor=True ):
      
      floor=[True,False]
      Include a linear noise floor in the fit.
+     
+     p0: a dictionary including any of {A,mu,sigma}, to force
+         inital parameter guesses if desired.  Only used if interactive=False.
     '''
     
     x = np.array(x)
@@ -438,7 +442,7 @@ def fit_gaussian( x, y, interactive=False, plot=True, floor=True ):
             plt.plot( xplot, gpl(xplot, a,b, A,mu,sigma), lw=2, c='r' )
         else:
             plt.plot( xplot, gauss(xplot, A,mu,sigma), lw=2, c='r' )
-        plt.title('center: {} -- sigma: {} -- FWHM: {}'.format(round(mu,4), round(sigma,4), round(2.35482*sigma,4)))
+        # plt.title('center: {} -- sigma: {} -- FWHM: {}'.format(round(mu,4), round(sigma,4), round(2.35482*sigma,4)))
         plt.axis( sized_ax )
         plt.show()
         
@@ -454,6 +458,19 @@ def fit_gaussian( x, y, interactive=False, plot=True, floor=True ):
             if np.abs( (val-median)/(A0-median) ) < .5:
                 sig0 = np.abs( x[ imax+i ] - x[imax] )
                 break
+        # any given parameters trump estimates
+        try:
+            A0 = p0['A']
+        except KeyError:
+            pass
+        try:
+            mu0 = p0['mu']
+        except KeyError:
+            pass
+        try:
+            sig0 = p0['sigma']
+        except KeyError:
+            pass
         if floor:
             # estimate line parameters
             a0 = np.percentile(y, 5.)
@@ -476,7 +493,9 @@ def fit_gaussian( x, y, interactive=False, plot=True, floor=True ):
     if floor:
         outdict['line_intercept'] = a
         outdict['line_slope'] = b
-    return outdict
+        return outdict, gpl(x, a,b, A,mu,sigma)
+    else:
+        return outdict, gauss(x, A,mu,sigma)
 
 
 def fit_n_gaussians( x, y, n, floor=True ):
@@ -1043,16 +1062,18 @@ class lookatme:
         try:
             print 'querying NIST for',ion,'lines'
             wls, aks = query_nist(ion, np.min(self.wl), np.max(self.wl))
-            ymin,ymax = plt.axis()[2:]
-            color = self.allcolors[ np.random.randint(len(self.allcolors)) ]
-            print 'adding',color,'lines for',ion,'at velocity',v
-            wls = wls - wls*(v/3e5)
-            self.ion_lines[ion] = plt.vlines( wls, ymin, ymax, linestyles='dashed', lw=2, color=color, label=ion )
-            self.leg = plt.legend(fancybox=True, loc='best' )
-            self.leg.get_frame().set_alpha(0.0)
-            plt.draw()
         except:
             print 'query failed! no internet? maybe a bad ion name?'
+            raise Exception
+        ymin,ymax = plt.axis()[2:]
+        color = self.allcolors[ np.random.randint(len(self.allcolors)) ]
+        print 'adding',color,'lines for',ion,'at velocity',v
+        wls = wls - wls*(v/3e5)
+        self.ion_lines[ion] = plt.vlines( wls, ymin, ymax, linestyles='dashed', lw=2, color=color, label=ion )
+        self.leg = plt.legend(fancybox=True, loc='best' )
+        self.leg.get_frame().set_alpha(0.0)
+        plt.draw()
+
 
     def add_simple_lines(self, ion, v=0.0):
         try:
@@ -1125,19 +1146,45 @@ class lookatme:
             self.ion_lines.pop(ion)
         plt.draw()
 
-    def fit_line(self, xmid):
-        print 'fitting a line around',xmid
+    def fit_abs_line(self, xmid):
+        print 'fitting an absorption line around',xmid
         xx, yy, ee, pc, yy2 = spectools.parameterize_line(self.wl, self.fl, self.er, xmid)
         self.fitted_lines.append(plt.plot(xx,yy2,'r')[0])
         self.fitted_lines.append(plt.plot(xx,pc,'k',lw=2)[0])
         pew,wl_mid,rel_d,fwhm = spectools.calc_everything(self.wl, self.fl, self.er, xmid)
-        print ' pEW: %.3f\n wl_mid: %.3f\n rel_depth: %.3f\n FWHM: %.3f' %(pew,wl_mid,rel_d,fwhm)
+        print ' pEW: %.3f\n wl_mid: %.3f\n rel_depth: %.3f\n FWHM: %.3f\n Integral: %.3f\n' \
+              %(pew,wl_mid,rel_d,fwhm, trapz(yy2-pc, x=xx))
+        plt.draw()
+
+    def fit_emis_line(self, xmid):
+        print 'fitting an emission line around',xmid
+        xx, yy, ee, pc, yy2 = spectools.parameterize_line(self.wl, self.fl, self.er, xmid, emission=True)
+        self.fitted_lines.append(plt.plot(xx,yy2,'r')[0])
+        self.fitted_lines.append(plt.plot(xx,pc,'k',lw=2)[0])
+        pew,wl_mid,rel_d,fwhm = spectools.calc_everything(self.wl, self.fl, self.er, xmid, emission=True)
+        print ' pEW: %.3f\n wl_mid: %.3f\n rel_depth: %.3f\n FWHM: %.3f\n Integral: %.3f\n' \
+               %(pew,wl_mid,rel_d,fwhm, trapz(yy2-pc, x=xx))
+        plt.draw()
+
+    def fit_gauss_line(self):
+        print 'fitting a gaussian'
+        print 'click to mark the region of the spectrum to consider'
+        [x1,y1], [x2,y2] = plt.ginput(2)
+        mask = (self.wl>min([x1,x2])) & (self.wl<max([x1,x2]))
+        gparams, garray = fit_gaussian(self.wl[mask], self.fl[mask], interactive=True)
+        self.fitted_lines.append(plt.plot(self.wl[mask],garray,'r'))
+        print ' A: %.3f\n mu: %.3f\n sigma: %.3f\n FWHM: %.3f\n Integral: %.3f\n' \
+              %(gparams['A'], gparams['mu'], gparams['sigma'], gparams['FWHM'], trapz(garray, x=self.wl[mask]))
         plt.draw()
 
     def remove_fitted_lines(self):
         print 'removing all fitted lines'
         for l in self.fitted_lines:
-            l.remove()
+            if type(l) == list:
+                for ll in l:
+                    ll.remove()
+            else:
+                l.remove()
         self.fitted_lines = []
         plt.draw()
     
@@ -1214,17 +1261,35 @@ class lookatme:
                     print 'I do not understand:\n',e
                     continue
             elif 'f' in inn.lower():
-                inn = raw_input('hit enter, then click on the line to fit. Or enter "clear" '+\
-                                'to clear all lines\n')
-                if 'clear' in inn:
+                inn = raw_input('type "a" to fit an absorption line, "e" for an emission line., '+\
+                                ' or "g" to fit a Gaussian interactively. '+\
+                                ' then hit enter and click on the line to fit. Or simply type "clear"'+\
+                                ' to clear all lines\n')
+                if 'clear' in inn.lower():
                     self.remove_fitted_lines()
-                else:
+                elif 'a' in inn.lower():
                     try:
                         x,y = plt.ginput()[0]
-                        self.fit_line(x)
+                        self.fit_abs_line(x)
                     except Exception as e:
                         print 'something went wrong:',e
                         continue
+                elif 'e' in inn.lower():
+                    try:
+                        x,y = plt.ginput()[0]
+                        self.fit_emis_line(x)
+                    except Exception as e:
+                        print 'something went wrong:',e
+                        continue
+                elif 'g' in inn.lower():
+                    try:
+                        self.fit_gauss_line()
+                    except Exception as e:
+                        print 'something went wrong:',e
+                        continue
+                else:
+                    print 'what?'
+                    continue
             elif 'c' in inn.lower():
                 inn = raw_input('\nenter the python code to run\n')
                 try:
