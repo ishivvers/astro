@@ -19,13 +19,14 @@ def fit_quad(x,y):
     # return best fit and parameters
     return quad(x,a,b,c), [a,b,c]
 
-def find_edge(x, y, xmid, side, width=100.0,  plot=False):
+def find_edge(x, y, xmid, side, emission=False, width=100.0,  plot=False):
     '''
     Find the edge of a feature by searching for the
      maximum inflection point in a set of locally-fit quadratics.
     x,y: spectrum Y on x
     xmid: an x-coordinate inside the feature
     side: one of 'left','right','l','r'
+    if emission = True, will search for emission line edge instead of absorption line edge
     width: width (in x-coords) of fitting window
     '''
     if side in ['l','left']:
@@ -38,25 +39,37 @@ def find_edge(x, y, xmid, side, width=100.0,  plot=False):
 
     while True:
         mask = (x > xmid-width/2)&(x < xmid+width/2)
-        xx = x[ mask ]
-        yy = y[ mask ]
-        ymod = fit_quad(xx,yy)[0]
-        # test to see if we've moved past one of the edges
-        if (xx[-1] < x[0]+width/2) or (xx[0] > x[-1]-width/2):
-            raise ValueError, "Edge not found."
-
-        imax = np.argmax(ymod)
-        if (imax != 0) and (imax != len(xx)-1):
-            # we have an edge!
-            # use a high percentile of the region inside the feature near the edge
-            #  to define our y value for the edge of the feature.
-            yval = np.percentile(yy, 90)
-            edge = ( xx[imax], yval )
-            break
         if side=='l':
             xmid -= width/10.0
         elif side=='r':
             xmid += width/10.0
+        xx = x[ mask ]
+        yy = y[ mask ]
+        try:
+            ymod = fit_quad(xx,yy)[0]
+        except:
+            continue
+        # test to see if we've moved past one of the edges
+        if (xx[-1] < x[0]+width/2) or (xx[0] > x[-1]-width/2):
+            raise ValueError, "Edge not found."
+        if emission:
+            imax = np.argmin(ymod)
+            if (imax != 0) and (imax != len(xx)-1):
+                # we have an edge!
+                # use a low percentile of the region inside the feature near the edge
+                #  to define our y value for the edge of the feature.
+                yval = np.percentile(yy, 10)
+                edge = ( xx[imax], yval )
+                break
+        else:
+            imax = np.argmax(ymod)
+            if (imax != 0) and (imax != len(xx)-1):
+                # we have an edge!
+                # use a high percentile of the region inside the feature near the edge
+                #  to define our y value for the edge of the feature.
+                yval = np.percentile(yy, 90)
+                edge = ( xx[imax], yval )
+                break
     if not edge:
         raise ValueError, "Edge not found."
     if plot:
@@ -67,16 +80,17 @@ def find_edge(x, y, xmid, side, width=100.0,  plot=False):
         plt.show()
     return edge
 
-def find_pcont(x, y, err, xmid, plot=False, width=100.0):
+def find_pcont(x, y, err, xmid, emission=False, plot=False, width=100.0):
     '''
     Find and remove the pseudocontinuum for the line centered
      at xmid (x-coords) in the spectrum y on x.
-    <width> is the edge-window width in x-coords
+    <width> is the edge-window width in x-coords.
+    if emission = True, looks for an emission line instead of absorption.
     Returns the line and the pseudocontinuum (x, y, y_pc).
     '''
     # find the edges
-    l_edge = find_edge(x,y,xmid,'l', width=width)
-    r_edge = find_edge(x,y,xmid,'r', width=width)
+    l_edge = find_edge(x,y,xmid,'l', emission=emission, width=width)
+    r_edge = find_edge(x,y,xmid,'r', emission=emission, width=width)
     # calculate the line
     b = (r_edge[1]-l_edge[1])/(r_edge[0]-l_edge[0])
     a = l_edge[1] - b*l_edge[0]
@@ -162,8 +176,8 @@ def FWHM(x, y, peak_val=None, plot=False):
         plt.show()
     return edges[1] - edges[0]
 
-def parameterize_line(x, y, err, xmid, plot=False, width=100.0, spline_smooth=None, line_container=None,
-                      test_fit=False, xyrange=None):
+def parameterize_line(x, y, err, xmid, emission=False, plot=False, width=100.0, spline_smooth=None,
+                      line_container=None, test_fit=False, xyrange=None):
     '''
     Fit a functional form to the line centered at xmid in 
      the spectrum y on x with errors err (all array-like).
@@ -172,6 +186,7 @@ def parameterize_line(x, y, err, xmid, plot=False, width=100.0, spline_smooth=No
     <line_container> can be an object to append all plotted lines to, so they can be removed later
     If <test_fit>, this attempts a few sanity checks on the line to discard bad fits, and <xyrange> must
      be a tuple with the xrange and yrange of the full spectrum.
+    If emission = True, looks for an emission line not an absorption line.
     Returns the line, the pseudocontinuum, the fit form, and the function
      (x, y, y_pc, y_fit, f(x))
     '''
@@ -188,16 +203,23 @@ def parameterize_line(x, y, err, xmid, plot=False, width=100.0, spline_smooth=No
     
     # run sanity checks
     attempts = 0
-    max_slope = 3.5      # max slope of pseudocontinuum, relative to width of full spectrum
-    max_width = 30000.0  # max width of feature in km/s
-    min_width = 5000.0   # min width of feature in km/s
-    max_offset = 15000.0 # max central velocity offset of feature in km/s
-    min_depth = 1.0      # minimum depth of line in standard deviations
     max_attempts = 3     # max number of adjustments to make when trying to fit the line
+    if emission:
+        max_slope = 3.5      # max slope of pseudocontinuum, relative to width of full spectrum
+        max_width = 30000.0  # max width of feature in km/s
+        min_width = 10.0   # min width of feature in km/s
+        max_offset = 15000.0 # max central velocity offset of feature in km/s
+        min_depth = 0.5      # minimum depth of line in standard deviations
+    else:
+        max_slope = 3.5      # max slope of pseudocontinuum, relative to width of full spectrum
+        max_width = 30000.0  # max width of feature in km/s
+        min_width = 5000.0   # min width of feature in km/s
+        max_offset = 15000.0 # max central velocity offset of feature in km/s
+        min_depth = 1.0      # minimum depth of line in standard deviations
     while True:
         if attempts > max_attempts:
             raise AssertionError('Could not successfully fit line at %.2f.'%xmid)
-        xx, yy, ee, pc = find_pcont(x, y, err, xmid, width=width)
+        xx, yy, ee, pc = find_pcont(x, y, err, xmid, width=width, emission=emission)
         if len(xx) == 0:
             print 'cannot determine the continuum'
             # try making the edge width bigger
@@ -210,7 +232,7 @@ def parameterize_line(x, y, err, xmid, plot=False, width=100.0, spline_smooth=No
             ss = ((max(pc)-min(pc))/xyrange[1]) / ((max(xx)-min(xx))/xyrange[0])
             ww = 3e5 * (max(xx)-min(xx))/xmid
             os = 3e5 * np.abs( (xx[np.argmin(yy2)]) - xmid ) / xmid
-            depth = np.max(pc-yy2)
+            depth = np.max(np.abs(pc-yy2))
             if ss > max_slope:
                 print 'slope too steep'
                 # if slope is too steep, try making the edge width bigger
@@ -262,7 +284,7 @@ def parameterize_line(x, y, err, xmid, plot=False, width=100.0, spline_smooth=No
         plt.show()
     return xx, yy, ee, pc, yy2
 
-def calc_everything(x, y, err, xmid, plot=0, width=100.0, spline_smooth=None, line_container=None):
+def calc_everything(x, y, err, xmid, emission=False, plot=0, width=100.0, spline_smooth=None, line_container=None):
     '''
     Calculates properties of a the line centered at xmid in 
      the spectrum y on x.  <plot> can be one of [0,1,2], to produce
@@ -281,7 +303,7 @@ def calc_everything(x, y, err, xmid, plot=0, width=100.0, spline_smooth=None, li
         p = False
     # xyrange = (np.max(x)-np.min(x), np.max(y)-np.min(y))
     xyrange = (6000, np.max(y)-np.min(y)) # use a fixed wl range, so that the sanity checks aren't dependant on wl range
-    xx, yy, ee, pc, yy2 = parameterize_line(x,y,err,xmid, plot=p, width=width, spline_smooth=spline_smooth,
+    xx, yy, ee, pc, yy2 = parameterize_line(x,y,err,xmid, emission=emission, plot=p, width=width, spline_smooth=spline_smooth,
                                         line_container=line_container, test_fit=True, xyrange=xyrange)
     # the pseudo equivalent width
     pew = pEW(xx,yy,pc)
