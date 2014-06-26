@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy.interpolate import UnivariateSpline
+import pyqt_fit.kernel_smoothing as smooth
 
 def quad(x,a,b,c):
     return a*x**2 + b*x + c
@@ -273,6 +274,83 @@ def parameterize_line(x, y, err, xmid, emission=False, plot=False, width=100.0, 
                 break
         else:
             break
+
+    if plot:
+        ls = plt.plot(xx,yy,'b')
+        for l in ls: lc.append(l)
+        ls = plt.plot(xx,yy2,'r')
+        for l in ls: lc.append(l)
+        ls = plt.plot(xx,pc,'k',lw=2)
+        for l in ls: lc.append(l)
+        plt.show()
+    return xx, yy, ee, pc, yy2
+
+def find_pcygni_pcont(x, y, err, xmid, plot=False, width=300.0):
+    '''
+    Find and remove the pseudocontinuum for the  p-cygni line centered
+     at xmid (x-coords) in the spectrum y on x.
+    <width> is the edge-window width in x-coords.
+    Returns the line and the pseudocontinuum (x, y, y_pc).
+    '''
+    # find the edges
+    l_edge = find_edge(x,y,xmid,'l', emission=False, width=width)
+    r_edge = find_edge(x,y,xmid,'r', emission=True, width=width)
+    # calculate the line
+    b = (r_edge[1]-l_edge[1])/(r_edge[0]-l_edge[0])
+    a = l_edge[1] - b*l_edge[0]
+    mask = (x>l_edge[0])&(x<r_edge[0])
+    xx = x[ mask ]
+    yy = y[ mask ]
+    if err != None:
+        ee = err[ mask ]
+    else:
+        ee = None
+    pc = a + b*xx
+    if plot:
+        plt.figure()
+        plt.plot(x,y,'b')
+        plt.plot(xx, pc, 'k', lw=2)
+        plt.scatter( [l_edge[0],r_edge[0]], [l_edge[1],r_edge[1]], marker='D', s=150, c='k', alpha=0.5)
+        plt.title('pseudo-continuum fit')
+        plt.show()
+    return xx, yy, ee, pc
+
+def parameterize_pcygni(x, y, err, xmid, plot=False, width=300.0, 
+                      line_container=None, test_fit=False, xyrange=None):
+    '''
+    Fit a functional form to the line centered at xmid in 
+     the spectrum y on x with errors err (all array-like).
+    <width> is the edge-window width in x-coords
+    <spline_smooth> defines the smoothing parameter for the spline based on the length of the wl array
+    <line_container> can be an object to append all plotted lines to, so they can be removed later
+    If <test_fit>, this attempts a few sanity checks on the line to discard bad fits, and <xyrange> must
+     be a tuple with the xrange and yrange of the full spectrum.
+    If emission = True, looks for an emission line not an absorption line.
+    Returns the line, the pseudocontinuum, and the fit form
+     (x, y, err, y_pc, y_fit)
+    '''
+    if line_container != None:
+        lc = line_container
+    else:
+        lc = []
+    if test_fit and type(xyrange)!=tuple:
+        raise Exception('If test_fit is true, must include measures of full spectral range.')
+    
+    attempts = 0
+    max_attempts = 3     # max number of adjustments to make when trying to fit the line
+    while True:
+        if attempts > max_attempts:
+            raise AssertionError('Could not successfully fit line at %.2f.'%xmid)
+        xx, yy, ee, pc = find_pcygni_pcont(x, y, err, xmid, width=width)
+        if len(xx) == 0:
+            print 'cannot determine the continuum'
+            # try making the edge width bigger
+            width *= 1.5
+            attempts += 1
+            continue
+        smoother = smooth.LocalPolynomialKernel1D(xx, yy, q=3)
+        yy2 = smoother( xx )
+        break
 
     if plot:
         ls = plt.plot(xx,yy,'b')

@@ -38,6 +38,10 @@ try:
     from astro import spectools
 except:
     print 'iAstro: spectools did not load; some functions may not be available'
+try:
+    from scikits import datasmooth
+except:
+    print 'Cannot load datasmooth; smooth function will be impaired.'
 
 class C:
     '''
@@ -268,20 +272,25 @@ def rebin1D( a, factor ):
     
     return np.hstack( (arr1, arr2) )
 
-def smooth( x, y, width=10.0, window='hanning' ):
+def smooth( x, y, width=None, window='hanning' ):
     '''
     Smooth the input spectrum y (on wl x) with a <window> kernel
      of width ~ width (in x units)
+    If width is not given, chooses an optimal smoothing width.
     <window> options: 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
     Returns the smoothed y array.
     '''
+    if width == None:
+        ys,l = datasmooth.smooth_data(x,y,midpointrule=True)
+        print 'chose smoothing lambda of',l
+        return ys
+    # if given an explicit width, do it all out here
     if y.ndim != 1:
         raise ValueError, "smooth only accepts 1 dimension arrays."
     if x.size != y.size:
         raise ValueError, "Input x,y vectors must be of same size"
     if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
         raise ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
-    # find the best window length
     avg_width = np.abs(np.mean(x[1:]-x[:-1]))
     window_len = int(round(width/avg_width))
     if y.size < window_len:
@@ -1173,6 +1182,8 @@ class lookatme:
         mask = (self.wl>min([x1,x2])) & (self.wl<max([x1,x2]))
         gparams, garray = fit_gaussian(self.wl[mask], self.fl[mask], interactive=True)
         self.fitted_lines.append(plt.plot(self.wl[mask],garray,'r'))
+        # get the Gaussian alone, w/o the line
+        garray = gauss( self.wl[mask], gparams['A'], gparams['mu'], gparams['sigma'] )
         print ' A: %.3f\n mu: %.3f\n sigma: %.3f\n FWHM: %.3f\n Integral: %.3f\n' \
               %(gparams['A'], gparams['mu'], gparams['sigma'], gparams['FWHM'], trapz(garray, x=self.wl[mask]))
         plt.draw()
