@@ -76,6 +76,9 @@ Original documentation:
 import numpy as np
 import pyfits as pf
 from ephem._libastro import eq_gal
+from urllib2 import urlopen
+import xml.etree.ElementTree as xmltree
+import re
 
 def load_dust_maps(dust_map_location='/home/isaac/Working/observations/dust_maps/'):
     hdu = pf.open(dust_map_location+'SFD_dust_4096_ngp.fits')[0]
@@ -90,10 +93,12 @@ def load_dust_maps(dust_map_location='/home/isaac/Working/observations/dust_maps
     MAP_DICT['N'] = [map_n, nsgp_n, scale_n]
     MAP_DICT['S'] = [map_s, nsgp_s, scale_s]
     return MAP_DICT
-try:
-    MAP_DICT = load_dust_maps()
-except:
-    print 'WARNING: cannot find/open dust maps, some functions may not work.'
+## loading the physical dust maps has been rendered obsolete
+## by the updated function get_galactic_reddening
+# try:
+#     MAP_DICT = load_dust_maps()
+# except:
+#     print 'WARNING: cannot find/open dust maps, some functions may not work.'
 
 
 def dered_CCM(wave, flux, EBV, R_V=3.1):
@@ -156,35 +161,50 @@ def dered_CCM(wave, flux, EBV, R_V=3.1):
     return flux * 10.**(0.4*A_lambda)
 
 
-def remove_galactic_reddening( ra, dec, wave, flux, R_V=3.1, verbose=False ):
+def get_galactic_reddening( srchstr ):
+    """
+    Queries IRSA for galactic reddening from Schlafly & Finkbeiner (2011).
+    <srchstr> must be resolvable by NED or SIMBAD; can be an 
+     object name or RA,Dec in reasonable string form.
+    """
+    irsa_uri = "http://irsa.ipac.caltech.edu/cgi-bin/DUST/nph-dust?locstr=%s"
+    result = urlopen( irsa_uri % srchstr.replace(' ','%20') ).read()
+
+    EBV = None
+    try:
+        tree = xmltree.fromstring( result )
+        if tree.attrib['status'] != 'ok':
+            print 'Query failed'
+            return None
+        for c in tree.getchildren():
+            if c.tag != 'result':
+                continue
+            gc = c.getchildren()
+            if 'Reddening' in gc[0].text:
+                # we found our spot!
+                res = gc[2].find('meanValueSandF').text
+                try:
+                    EBV = float(re.search('\d+\.\d+', res).group())
+                except:
+                    continue
+    except:
+        pass
+    return EBV
+
+
+
+def remove_galactic_reddening( srchstr, wave, flux, R_V=3.1, verbose=False ):
     '''
     Deredden a spectrum by the Milky Way reddening due to 
-     dust absorption (measured in the Schlegel et al. dust maps)
-    ra, dec: the obvious, in decimal degrees
+     dust absorption (measured in the Schlafly & Finkbeiner 2011 maps)
+    srchstr: must be resolvable by NED or SIMBAD; can be an 
+     object name or RA,Dec in reasonable string form.
     wave: 1D wavelength vector (angstroms)
     flux: 1D flux vector to get dereddened
     R_V: the reddening coefficient to use
     '''
-    try:
-        assert( set(['S','N']) == set(MAP_DICT.keys()) )
-    except:
-        raise IOError('dust map error!')
-    # coordinate-to-pixel mapping from the dust map fits header
-    X_pix = lambda l,b,pole: MAP_DICT[pole][2] * np.sqrt(1.-MAP_DICT[pole][1]*np.sin(b)) * np.cos(l) + 2047.5
-    Y_pix = lambda l,b,pole: -MAP_DICT[pole][2] * MAP_DICT[pole][1] * np.sqrt(1.-MAP_DICT[pole][1]*np.sin(b))*np.sin(l) + 2047.5 
-    # get galactic coordinates with eq_gal, which does everything in radians
-    ra_rad = np.deg2rad(ra)
-    dec_rad = np.deg2rad(dec)
-    l,b = eq_gal( 2000., ra_rad, dec_rad )
-    if verbose: print 'RA, Dec: %.3f, %.3f --> l, b: %.3f, %.3f'%(ra,dec,l,b)
-    if b>0:
-        pole = 'N'
-    else:
-        pole = 'S'
-    # get E(B-V) for these coordinates
-    X = int(round( X_pix(l,b,pole) ))
-    Y = int(round( Y_pix(l,b,pole) ))
-    EBV = MAP_DICT[pole][0][X,Y]
+    
+    EBV = get_galactic_reddening( srchstr )
     if verbose: print 'dereddening by E(B-V) =',EBV
     # return the de-reddened flux vector and the E(B-V) used
     return dered_CCM( wave, flux, EBV, R_V ), EBV

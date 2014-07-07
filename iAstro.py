@@ -1137,9 +1137,10 @@ class lookatme:
             self.ion_lines.pop(ion)
         plt.draw()
     
-    def dredden_gal(self, ra, dec):
-        print 'dereddening MW: ra,dec =',ra, dec
-        self.fl = dered.remove_galactic_reddening( ra, dec, self.wl, self.fl, verbose=True )
+    def deredden_gal(self, srchstr):
+        print 'dereddening using MW values'
+        self.fl, EBV = dered.remove_galactic_reddening( srchstr, self.wl, self.fl, verbose=True )
+        print 'using E(B-V) = {}'.format(EBV)
         plt.clf()
         self.fig = pretty_plot_spectra(self.wl, self.fl, err=self.er, fig=self.fig)
         for ion in self.ion_lines.keys():
@@ -1249,19 +1250,16 @@ class lookatme:
                     continue
                 self.modify_dopcor(newz)
             elif 'r' in inn.lower():
-                inn = raw_input('\nenter the E(B-V) to deredden, or RA Dec (to use MW values)\n')
+                inn = raw_input('\nenter the numerical E(B-V) to deredden, or hit enter to use MW values\n')
                 try:
                     EBV = float(inn)
                     self.deredden(EBV)
                 except:
+                    inn = raw_input('\nenter a SIMBAD-resolvable search string (coords or name)\n')
                     try:
-                        sra, sdec = [ss for ss in inn.split(' ') if ss]
-                        ra = parse_ra(sra)
-                        dec = parse_dec(sdec)
-                        self.deredden_gal(ra, dec)
-                    except Exception as e:
-                        print 'You entered:',inn
-                        print 'I do not understand:\n',e
+                        self.deredden_gal( inn.strip() )
+                    except:
+                        print 'Error determining galactic reddening'
                         continue
             elif 's' in inn.lower():
                 inn = raw_input('\nenter width of the smoothing window (A)\n')
