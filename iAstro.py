@@ -290,7 +290,7 @@ def smooth( x, y, width=None, window='hanning' ):
     if x.size != y.size:
         raise ValueError, "Input x,y vectors must be of same size"
     if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-        raise ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
+        raise ValueError, "Window must be one of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
     avg_width = np.abs(np.mean(x[1:]-x[:-1]))
     window_len = int(round(width/avg_width))
     if y.size < window_len:
@@ -306,7 +306,7 @@ def smooth( x, y, width=None, window='hanning' ):
         w=eval('np.'+window+'(window_len)')
 
     y=np.convolve(w/w.sum(),s,mode='valid')
-    yout = y[(window_len/2-1):-(window_len/2)]
+    yout = y[(window_len/2):-(window_len/2)]
     if len(yout) != len(x):
         yout = yout[:len(x)]
     return yout
@@ -1172,7 +1172,7 @@ class lookatme:
         self.fitted_lines.append(plt.plot(xx,yy2,'r')[0])
         self.fitted_lines.append(plt.plot(xx,pc,'k',lw=2)[0])
         pew,wl_mid,rel_d,fwhm = spectools.calc_everything(self.wl, self.fl, self.er, xmid, emission=True)
-        print ' pEW: %.3f\n wl_mid: %.3f\n rel_depth: %.3f\n FWHM: %.3f\n Integral: %.3f\n' \
+        print ' pEW: %.3f\n wl_mid: %.3f\n rel_height: %.3f\n FWHM: %.3f\n Integral: %.3f\n' \
                %(pew,wl_mid,rel_d,fwhm, trapz(yy2-pc, x=xx))
         plt.draw()
 

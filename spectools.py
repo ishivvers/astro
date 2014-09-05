@@ -287,7 +287,8 @@ def parameterize_line(x, y, err, xmid, emission=False, plot=False, width=100.0, 
         plt.show()
     return xx, yy, ee, pc, yy2
 
-def calc_everything(x, y, err, xmid, emission=False, plot=0, width=100.0, line_container=None, smoothing_order=3):
+def calc_everything(x, y, err, xmid, emission=False, plot=0, width=100.0,
+                    line_container=None, smoothing_order=3, test_fit=True):
     '''
     Calculates properties of a the line centered at xmid in 
      the spectrum y on x.  <plot> can be one of [0,1,2], to produce
@@ -307,22 +308,38 @@ def calc_everything(x, y, err, xmid, emission=False, plot=0, width=100.0, line_c
     # xyrange = (np.max(x)-np.min(x), np.max(y)-np.min(y))
     xyrange = (6000, np.max(y)-np.min(y)) # use a fixed wl range, so that the sanity checks aren't dependant on wl range
     xx, yy, ee, pc, yy2 = parameterize_line(x,y,err,xmid, emission=emission, plot=p, width=width, smoothing_order=smoothing_order,
-                                        line_container=line_container, test_fit=True, xyrange=xyrange)
-    # the pseudo equivalent width
-    pew = pEW(xx,yy,pc)
-    # the wl of the minimum, where the minimum is the largest distance between pseudocontinuum and fit
-    imin = np.argmax(pc-yy2)
-    wl_min = xx[imin]
-    # the relative depth of the feature
-    relative = yy2/pc
-    rel_depth = 1.0 - np.min(relative)
-    # the FWHM
+                                        line_container=line_container, test_fit=test_fit, xyrange=xyrange)
+    # second-order plots?
     if plot > 1:
         p = True
     else:
         p = False
-    fwhm = FWHM(xx, relative, 1.0, plot=p)
-    return pew, wl_min, rel_depth, fwhm
+
+    # the pseudo equivalent width
+    if emission:
+        # the pseudo equivalent width of the (inverted) emission
+        pew = pEW(xx, 2*pc-yy, pc) #warning: nonsense if emission line is much higher than continuum!
+    else:
+        pew = pEW(xx,yy,pc)
+    # the central wavelength
+    if emission:
+        imax = np.argmax(yy2-pc)
+        wl_mid = xx[imax]
+    else:
+        imin = np.argmax(pc-yy2)
+        wl_mid = xx[imin]
+    # the relative depth/height of the feature
+    relative = yy2/pc
+    if emission:
+        reldh = np.max(relative) - 1.0
+        # the FWHM of the emission
+        fwhm = FWHM(xx, relative, 1.0, plot=p, emission=True)
+    else:
+        reldh = 1.0 - np.min(relative)
+        # the FWHM of the absorption
+        fwhm = FWHM(xx, relative, 1.0, plot=p)
+
+    return pew, wl_mid, reldh, fwhm
 
 
 def find_pcygni_pcont(x, y, err, xmid, plot=False, width=300.0):
@@ -454,7 +471,8 @@ def parameterize_pcygni(x, y, err, xmid, plot=False, width=300.0, smoothing_orde
     return xx, yy, ee, pc, yy2
 
 
-def calc_everything_pcygni(x, y, err, xmid, plot=0, width=300.0, line_container=None, smoothing_order=3):
+def calc_everything_pcygni(x, y, err, xmid, plot=0, width=300.0, line_container=None,
+                           smoothing_order=3, test_fit=True):
     '''
     Calculates properties of a P-Cygni line centered at xmid in 
      the spectrum y on x.  <plot> can be one of [0,1,2], to produce
@@ -478,7 +496,7 @@ def calc_everything_pcygni(x, y, err, xmid, plot=0, width=300.0, line_container=
     # xyrange = (np.max(x)-np.min(x), np.max(y)-np.min(y))
     xyrange = (6000, np.max(y)-np.min(y)) # use a fixed wl range, so that the sanity checks aren't dependant on wl range
     xx, yy, ee, pc, yy2 = parameterize_pcygni(x,y,err,xmid, plot=p, width=width, smoothing_order=smoothing_order,
-                                        line_container=line_container, test_fit=True, xyrange=xyrange)
+                                        line_container=line_container, test_fit=test_fit, xyrange=xyrange)
     # the wl of the min and max, relative to the pseudocontinuum
     imin = np.argmax(pc-yy2)
     wl_min = xx[imin]

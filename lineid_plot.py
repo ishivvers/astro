@@ -256,8 +256,7 @@ def plot_line_ids(wave, flux, line_wave, line_label1, label1_size=None,
               The Axes in which the labels are to be placed. If not
               given a new Axes is created.  If given, will not plot 
               wave and flux; those vectors are only used to draw 
-              label extensions if extend is True.  This only works for
-              figures with a single axis!
+              label extensions if extend is True.
           fig: Matplotlib Figure
               The figure in which the labels are to be placed. If `ax`
               if given then keyword is then ignored. The figure
