@@ -1200,6 +1200,26 @@ class lookatme:
         self.fitted_lines = []
         plt.draw()
     
+    def save(self, fname):
+        """
+        Saves wl,fl arrays into an ascii file (fname), using
+         current version (with reddening, doppcor corrections)
+        """
+        fout = open(fname,'w')
+        fout.write( '# Lookatme-processed spectrum\n' )
+        fout.write( '# Dereddened : E(B-V) = %.4f\n' %self.EBV )
+        fout.write( '# Deredshifted: z = %.4f\n' %self.dopcor )
+        if self.er != None:
+            fout.write( '# wavelength   flux   error\n')
+            for i,wl in enumerate(self.wl):
+                fout.write( '%.5f    %.5f    %.5f\n' %(wl, self.fl[i], self.er[i]) )
+        else:
+            fout.write( '# wavelength   flux\n')
+            for i,wl in enumerate(self.wl):
+                fout.write( '%.5f    %.5f\n' %(wl, self.fl[i]) )
+        fout.close()
+        print 'Saved to',fname
+    
     def run(self):
         '''
         Wait for input and respond to it.
@@ -1213,6 +1233,7 @@ class lookatme:
                             ' f: fit for a spectral line\n'+\
                             ' c: execute a python command\n'+\
                             ' u: undo everything and replot spectrum\n'+\
+                            ' v: save spectrum to ascii file\n'+\
                             ' q: quit\n')
             if 'l' in inn.lower():
                 inn = raw_input('\nenter an ion name (e.g. "Fe II") and an optional blueshift velocity,'+\
@@ -1309,6 +1330,10 @@ class lookatme:
                     continue
             elif 'u' in inn.lower():
                 self.reset()
+                continue
+            elif 'v' in inn.lower():
+                inn = raw_input('Please enter the filename to save to:\n')
+                self.save( inn )
                 continue
             elif 'q' in inn.lower():
                 break
