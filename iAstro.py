@@ -17,6 +17,7 @@ allcolors = [c for c in colors.cnames.keys() if ('dark' in c) or ('medium') in c
 import re
 import pyfits
 from astro import dered
+from astro.fits2flm import fits2flm
 # looks like some versions of my python don't have the newest SciPY, so here's a hack
 try:
     from scipy.integrate import trapz
