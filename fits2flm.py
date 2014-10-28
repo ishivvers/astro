@@ -3,6 +3,7 @@ A quick script that converts a fits file (1d spectrum with appropriate linear
     parameters in the header) into a .flm ascii file.
 """
 import pyfits as pf
+import numpy as np
 
 
 def fits2flm( fitsfile, outfile ):
