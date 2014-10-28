@@ -20,7 +20,7 @@ from astro import dered
 from astro.fits2flm import fits2flm
 # looks like some versions of my python don't have the newest SciPY, so here's a hack
 try:
-    from scipy.integrate import trapz
+    from scipy.integrate import trapz, cumtrapz
     from scipy.optimize import curve_fit
     from scipy.ndimage import percentile_filter
     from scipy.interpolate import UnivariateSpline
@@ -1190,6 +1190,34 @@ class lookatme:
               %(gparams['A'], gparams['mu'], gparams['sigma'], gparams['FWHM'], trapz(garray, x=self.wl[mask]))
         plt.draw()
 
+    def calc_equiv_width(self):
+        print 'calculating the equivalent width of a line'
+        print '\nclick twice to mark a region to fit the left continuum level\n'
+        [x1,y1], [x2,y2] = plt.ginput(2)
+        mask_l = (self.wl>min([x1,x2])) & (self.wl<max([x1,x2]))
+        xmin = max([x1,x2])
+        print '\nclick twice to mark a region to fit the right continuum level\n'
+        [x1,y1], [x2,y2] = plt.ginput(2)
+        mask_r = (self.wl>min([x1,x2])) & (self.wl<max([x1,x2]))
+        xmax = min([x1,x2])
+        # mask_t covers the whole feature in between the two regions marking
+        #  the continuum
+        mask_t = (self.wl>xmin) & (self.wl<xmax)
+        # calculate the continuum line
+        fl_l = np.mean(self.fl[mask_l])
+        fl_r = np.mean(self.fl[mask_r])
+        wl_l = np.mean(self.wl[mask_l])
+        wl_r = np.mean(self.wl[mask_r])
+        b = (fl_r-fl_l)/(wl_r-wl_l)
+        a = fl_l - b*wl_l
+        y_cont = a + self.wl[mask_t]*b
+        self.fitted_lines.append( plt.plot(self.wl[mask_t], y_cont, 'k--') )
+        self.fitted_lines.append( plt.plot(self.wl[mask_t], self.fl[mask_t], 'k') )
+        # now integrate over the whole thing
+        ew = np.trapz( (1.0 - self.fl[mask_t]/y_cont), self.wl[mask_t] )
+        print '\n'+'-'*20+'\n\n'+'Equivalent Width: %.5f\n'%ew
+        plt.draw()
+
     def remove_fitted_lines(self):
         print 'removing all fitted lines'
         for l in self.fitted_lines:
@@ -1232,6 +1260,7 @@ class lookatme:
                             ' r: deredden the spectrum (without removing any previous reddening)\n'+\
                             ' s: smooth the spectrum\n'+\
                             ' f: fit for a spectral line\n'+\
+                            ' w: calculate equivalent width of absoption line\n' +\
                             ' c: execute a python command\n'+\
                             ' u: undo everything and replot spectrum\n'+\
                             ' v: save spectrum to ascii file\n'+\
@@ -1321,6 +1350,8 @@ class lookatme:
                 else:
                     print 'what?'
                     continue
+            elif 'w' in inn.lower():
+                self.calc_equiv_width()
             elif 'c' in inn.lower():
                 inn = raw_input('\nenter the python code to run\n')
                 try:
