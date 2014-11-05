@@ -308,8 +308,10 @@ def smooth( x, y, width=None, window='hanning' ):
 
     y=np.convolve(w/w.sum(),s,mode='valid')
     yout = y[(window_len/2):-(window_len/2)]
-    if len(yout) != len(x):
-        yout = yout[:len(x)]
+    if len(yout) < len(x):
+        yout = y[(window_len/2):-(window_len/2)+1]
+    elif len(yout) > len(x):
+        yout = y[(window_len/2):-(window_len/2)-1]
     return yout
 
 def estimate_noise( x, y, plot=False, factor=20 ):
