@@ -265,9 +265,9 @@ class SynSet():
             slider.label.set_y(0.8)
             self.temp_sliders.append(slider)
         # the buttons
-        # ax = plt.subplot2grid( (ntall,6), (ntall-1,3) )
-        # self.rezero_button = Button(ax, 'ReZero', color='grey', hovercolor='green')
-        # self.rezero_button.on_clicked(self._rezero)
+        ax = plt.subplot2grid( (ntall,6), (ntall-1,3) )
+        self.rezero_button = Button(ax, 'Mask', color='grey', hovercolor='green')
+        self.rezero_button.on_clicked(self._mask)
         ax = plt.subplot2grid( (ntall,6), (ntall-1,0) )
         self.tinput_button = Button(ax, 'Text CMD', color='grey', hovercolor='green')
         self.tinput_button.on_clicked(self._accept_input)
@@ -333,6 +333,44 @@ class SynSet():
         self.synspec = np.array([ map(float,[l.split(' ')[0],l.split(' ')[1]]) for l in o.strip().split('\n') ])
         # replot the spectra
         self._replot_spectrum()
+
+    def _mask(self, event):
+        '''
+        Mask out the spectrum between wlmin and wlmax. Saves to file the text needed
+         to add to the synapps yaml.
+        '''
+        plt.sca( self.spec_ax )
+        wlmins, wlmaxs = [],[]
+        while True:
+            print 'Click twice to mark the region to mask.'
+            try:
+                [x1,y1],[x2,y2] = plt.ginput(2, timeout=60)
+            except ValueError:
+                break
+            wlmin = np.min([x1,x2])
+            wlmax = np.max([x1,x2])
+            wlmins.append(wlmin)
+            wlmaxs.append(wlmax)
+            # show that we've masked out some parts
+            m = (self.spec[:,0] > wlmin) & (self.spec[:,0] < wlmax)
+            plt.scatter(self.spec[:,0][m], self.spec[:,1][m], c='r', marker='x')
+            plt.draw()
+            inn = raw_input('\nHit "q" to continue, or enter for another mask\n')
+            if 'q' in inn:
+                break
+        # and now actually write to file the mask info
+        applys = (('%10s,'%'Yes')*len(wlmins)).strip(',')
+        weights = (('%10s,'%'0.00')*len(wlmins)).strip(',')
+        lowers = ''.join( ['%10s,'%str(round(wl,2)) for wl in wlmins] ).strip(',')
+        uppers = ''.join( ['%10s,'%str(round(wl,2)) for wl in wlmaxs] ).strip(',')
+        output = """    regions      :
+        apply    : [      Yes, %s ]
+        weight   : [     1.00, %s ]
+        lower    : [     0.00, %s ]
+        upper    : [ 10000.00, %s ]
+        """ %(applys, weights, lowers, uppers)
+        open(self.yaml_file + '.regions','w').write(output)
+        print 'Wrote to',self.yaml_file+'.regions'
 
     def _accept_input(self, event):
         print 'Enter a command. "h" for help, "q" to exit the cmd line.\n'
