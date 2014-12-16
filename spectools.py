@@ -221,7 +221,14 @@ def parameterize_line(x, y, err, xmid, emission=False, plot=False, width=100.0, 
     while True:
         if attempts > max_attempts:
             raise AssertionError('Could not successfully fit line at %.2f.'%xmid)
-        xx, yy, ee, pc = find_pcont(x, y, err, xmid, width=width, emission=emission)
+        try:
+            xx, yy, ee, pc = find_pcont(x, y, err, xmid, width=width, emission=emission)
+        except ValueError:
+            print 'cannot determine the continuum'
+            # try making the edge width bigger
+            width *= 1.5
+            attempts += 1
+            continue
         if len(xx) == 0:
             print 'cannot determine the continuum'
             # try making the edge width bigger
@@ -301,6 +308,11 @@ def calc_everything(x, y, err, xmid, emission=False, plot=0, width=100.0,
      rel_depth
      FWHM
     '''
+    print 'Calculating everything:'
+    if emission:
+        print ' Emission'
+    else:
+        print ' Absorption'
     if plot > 0:
         p = True
     else:
@@ -404,7 +416,14 @@ def parameterize_pcygni(x, y, err, xmid, plot=False, width=300.0, smoothing_orde
     while True:
         if attempts > max_attempts:
             raise AssertionError('Could not successfully fit line at %.2f.'%xmid)
-        xx, yy, ee, pc = find_pcygni_pcont(x, y, err, xmid, width=width)
+        try:
+            xx, yy, ee, pc = find_pcygni_pcont(x, y, err, xmid, width=width)
+        except ValueError:
+            print 'cannot determine the continuum'
+            # try making the edge width bigger
+            width *= 1.5
+            attempts += 1
+            continue
         if len(xx) == 0:
             print 'cannot determine the continuum'
             # try making the edge width bigger
@@ -489,6 +508,8 @@ def calc_everything_pcygni(x, y, err, xmid, plot=0, width=300.0, line_container=
      FWHM_absorption
      FWHM_emission
     '''
+    print 'Calculating everything:'
+    print ' P-Cygni'
     if plot > 0:
         p = True
     else:
