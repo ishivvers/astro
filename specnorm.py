@@ -38,7 +38,7 @@ class normalizer:
         print ' press enter at any point to refit continuum'
         print ' after continuum is fit, press "n" to normalize'
         print ' press "r" to reset'
-        print ' press "w" to write continuum out to file'
+        print ' press "w" to write normalized spectrum out to file'
         print 'When finished, the continuum is accessible as "<normalizer>.continuum"'
         print 'The continuum function is accessible as "<normalizer>.cfunc"'
         print '*'*20
