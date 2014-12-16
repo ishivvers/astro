@@ -14,20 +14,29 @@ from urllib2 import urlopen
 
 def get_SN_info( name ):
     """
-    Queries simbad for SN redshift and host galaxy.
+    Queries simbad for SN coords, redshift, and host galaxy.
     If redshift is not given for SN, attempts to resolve link to 
      host galaxy and report its redshift.
-    Returns ( redshift, host_name, redshift_citation ), with
+    Returns ( (ra,dec), redshift, host_name, redshift_citation ), with
      values of None inserted whenever it cannot resolve the value.
     """
     simbad_uri = "http://simbad.u-strasbg.fr/simbad/sim-id?output.format=ASCII&Ident=%s"
+    regex_coords = "Coordinates\(FK5.+\): .+"
     regex_redshift = "Redshift:\s+\d+\.\d+.+"
     regex_host = "apparent\s+host\s+galaxy\s+.+?\{(.*?)\}"
 
     result = urlopen( simbad_uri % name.replace(' ','%20') ).read()
+    rescoords = re.search( regex_coords, result )
     resred = re.search( regex_redshift, result )
     reshost = re.search( regex_host, result )
-
+    
+    try:
+        cs = rescoords.group().split(':')[1].strip()
+        ra = cs[:12].strip()
+        dec = cs[12:].strip()
+    except:
+        ra,dec = None,None
+        
     try:
         redshift = float(resred.group().strip('Redshift: ').split(' ')[0])
         citation = resred.group().split(' ')[-1]
@@ -50,4 +59,5 @@ def get_SN_info( name ):
         except AttributeError:
             pass
 
-    return (redshift, host, citation)
+    return ((ra,dec), redshift, host, citation)
+
