@@ -227,7 +227,7 @@ def prepare_axes(wave, flux, fig=None, ax_lower=(0.1, 0.1),
 
 
 def plot_line_ids(wave, flux, line_wave, line_label1, label1_size=None,
-                  extend=True, **kwargs):
+                  label_weight=None, extend=True, **kwargs):
     """Label features with automatic layout of labels.
 
     Parameters
@@ -243,6 +243,7 @@ def plot_line_ids(wave, flux, line_wave, line_label1, label1_size=None,
     label1_size: list of floats
         Font size in points. If not given the default value in
         Matplotlib is used. This is typically 12.
+    label_weight: passed along to annotate; can be 'normal', 'bold', etc.
     extend: boolean or list of boolean values
         For those lines for which this keyword is True, a dashed line
         will be drawn from the tip of the annotation to the flux at the
@@ -323,6 +324,8 @@ def plot_line_ids(wave, flux, line_wave, line_label1, label1_size=None,
     flux = np.array(flux)
     line_wave = np.array(line_wave)
     line_label1 = np.array(line_label1)
+    if label_weight == None:
+        label_weight = 'bold'
 
     nlines = len(line_wave)
     assert nlines == len(line_label1), "Each line must have a label."
@@ -389,6 +392,7 @@ def plot_line_ids(wave, flux, line_wave, line_label1, label1_size=None,
                     rotation=90, horizontalalignment="center",
                     verticalalignment="center",
                     fontsize=label1_size[i],
+                    weight=label_weight,
                     arrowprops=dict(arrowstyle="-",
                                     relpos=(0.5, 0.0)),
                     label=label_u[i])
