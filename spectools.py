@@ -59,7 +59,7 @@ def find_edge(x, y, xmid, side, emission=False, width=100.0,  plot=False):
                 # we have an edge!
                 # use a low percentile of the region inside the feature near the edge
                 #  to define our y value for the edge of the feature.
-                yval = np.percentile(yy, 10)
+                yval = np.percentile(yy, 30)
                 edge = ( xx[imax], yval )
                 break
         else:
@@ -114,6 +114,7 @@ def find_pcont(x, y, err, xmid, emission=False, plot=False, width=100.0):
 
 def pEW(x, y, pc):
     '''
+    For absorption lines only.
     Calculates the pseudo-equivalent width as described
      by Silverman '12.
     x: wavelength
@@ -125,6 +126,17 @@ def pEW(x, y, pc):
     for i in range(len(x)-1):
         dlam = x[i+1] - x[i]
         greg.append( dlam*( (pc[i]-y[i])/pc[i] ) )
+    return np.sum(greg)
+
+def intflux(x, y, pc):
+    '''
+    For emission lines only.
+    Calculates the simple integrated flux above the pseudocontinuum.
+    '''
+    greg = []
+    for i in range(len(x)-1):
+        dlam = x[i+1] - x[i]
+        greg.append( dlam*(y[i]-pc[i])  )
     return np.sum(greg)
 
 def FWHM(x, y, continuum_level=None, plot=False, emission=False):
@@ -172,6 +184,7 @@ def FWHM(x, y, continuum_level=None, plot=False, emission=False):
     try:
         assert len(edges) == 2
     except:
+        # import pdb; pdb.set_trace()
         raise ValueError, "Intersections with HM not found!"
     if plot:
         plt.figure()
@@ -209,9 +222,9 @@ def parameterize_line(x, y, err, xmid, emission=False, plot=False, width=100.0, 
     if emission:
         max_slope = 3.5      # max slope of pseudocontinuum, relative to width of full spectrum
         max_width = 30000.0  # max width of feature in km/s
-        min_width = 10.0   # min width of feature in km/s
+        min_width = 1000.0   # min width of feature in km/s
         max_offset = 15000.0 # max central velocity offset of feature in km/s
-        min_depth = 0.5      # minimum depth of line in standard deviations
+        min_depth = 1.0      # minimum depth of line in standard deviations
     else:
         max_slope = 3.5      # max slope of pseudocontinuum, relative to width of full spectrum
         max_width = 30000.0  # max width of feature in km/s
@@ -242,7 +255,10 @@ def parameterize_line(x, y, err, xmid, emission=False, plot=False, width=100.0, 
             ss = ((max(pc)-min(pc))/xyrange[1]) / ((max(xx)-min(xx))/xyrange[0])
             ww = 3e5 * (max(xx)-min(xx))/xmid
             os = 3e5 * np.abs( (xx[np.argmin(yy2)]) - xmid ) / xmid
-            depth = np.max(np.abs(pc-yy2))
+            if emission:
+                depth = np.max( yy2-pc )
+            else:
+                depth = np.max( pc-yy2 )
             if ss > max_slope:
                 print 'slope too steep'
                 # if slope is too steep, try making the edge width bigger
@@ -273,9 +289,15 @@ def parameterize_line(x, y, err, xmid, emission=False, plot=False, width=100.0, 
                 width *= 1.5
                 attempts += 1
                 continue
-            elif (np.argmin(yy2) == 0) or (np.min(yy2) == len(yy2)-1):
-                print 'bad parameterization'
-                # this happens if one of the edges is the minimum
+            elif (not emission) and ((np.argmin(yy2) == 0) or (np.argmin(yy2) == len(yy2)-1)):
+                print 'minimum at edge'
+                # try widening the feature
+                width *= 1.5
+                attempts += 1
+                continue
+            elif (emission) and ((np.argmax(yy2) == 0) or (np.argmax(yy2) == len(yy2)-1)):
+                print 'maximum at edge'
+                # try widening the feature
                 width *= 1.5
                 attempts += 1
                 continue
@@ -283,6 +305,44 @@ def parameterize_line(x, y, err, xmid, emission=False, plot=False, width=100.0, 
                 break
         else:
             break
+    # an additional check; only matters for nebular emission lines
+    if np.min(pc) < 0:
+        pc = pc - np.min(pc)
+    if plot:
+        ls = plt.plot(xx,yy,'b')
+        for l in ls: lc.append(l)
+        ls = plt.plot(xx,yy2,'r')
+        for l in ls: lc.append(l)
+        ls = plt.plot(xx,pc,'k',lw=2)
+        for l in ls: lc.append(l)
+        plt.show()
+    return xx, yy, ee, pc, yy2
+
+def manual_parameterize_line(x, y, err, l_edge, r_edge, smoothing_order=5, line_container=None, plot=False):
+    """
+    Given a spectrum (x,y,err) and two coordinates (r_edge = (x_right, y_right)), simply
+     forces everything in between to be a line and parameterizes it.
+    """
+    if line_container != None:
+        lc = line_container
+    else:
+        lc = []
+
+    m = (x>=l_edge[0])&(x<=r_edge[0])
+    xx = x[m]
+    yy = y[m]
+    if err != None:
+        ee = err[m]
+    else:
+        ee = None
+    
+    # define pc
+    b = (r_edge[1]-l_edge[1])/(r_edge[0]-l_edge[0])
+    a = l_edge[1] - b*l_edge[0]
+    pc = a + b*xx
+    
+    smoother = smooth.LocalPolynomialKernel1D(xx, yy, q=smoothing_order)
+    yy2 = smoother( xx )
 
     if plot:
         ls = plt.plot(xx,yy,'b')
@@ -294,14 +354,17 @@ def parameterize_line(x, y, err, xmid, emission=False, plot=False, width=100.0, 
         plt.show()
     return xx, yy, ee, pc, yy2
 
+
 def calc_everything(x, y, err, xmid, emission=False, plot=0, width=100.0,
-                    line_container=None, smoothing_order=3, test_fit=True):
+                    line_container=None, smoothing_order=3, test_fit=True, manual=False):
     '''
     Calculates properties of a the line centered at xmid in 
      the spectrum y on x.  <plot> can be one of [0,1,2], to produce
      different levels of plots. <width> is the width of the edge windows
      used to fit for the continuum. <spline_smooth> is a factor that defines
      the spline_smooth factor based on size of the wl array.
+    If manual=True, will assume that xmid=( l_coords, r_coords ), and takes the 
+     edges of the feature (and pc) to be exactly there.
     Returns:
      pEW
      wl_min
@@ -317,22 +380,31 @@ def calc_everything(x, y, err, xmid, emission=False, plot=0, width=100.0,
         p = True
     else:
         p = False
-    # xyrange = (np.max(x)-np.min(x), np.max(y)-np.min(y))
-    xyrange = (6000, np.max(y)-np.min(y)) # use a fixed wl range, so that the sanity checks aren't dependant on wl range
-    xx, yy, ee, pc, yy2 = parameterize_line(x,y,err,xmid, emission=emission, plot=p, width=width, smoothing_order=smoothing_order,
-                                        line_container=line_container, test_fit=test_fit, xyrange=xyrange)
+
+    if not manual:
+        # xyrange = (np.max(x)-np.min(x), np.max(y)-np.min(y))
+        xyrange = (6000, np.max(y)-np.min(y)) # use a fixed wl range, so that the sanity checks aren't dependant on wl range
+        xx, yy, ee, pc, yy2 = parameterize_line(x,y,err,xmid, emission=emission, plot=p, width=width, smoothing_order=smoothing_order,
+                                            line_container=line_container, test_fit=test_fit, xyrange=xyrange)
+    else:
+        l_edge, r_edge = xmid
+        xx, yy, ee, pc, yy2 = manual_parameterize_line(x,y,err, l_edge, r_edge, 
+                                                       line_container=line_container, plot=p)
     # second-order plots?
     if plot > 1:
         p = True
     else:
         p = False
 
-    # the pseudo equivalent width
+    # the pseudo equivalent width for absorption lines; the integrated flux for emission lines
     if emission:
         # the pseudo equivalent width of the (inverted) emission
-        pew = pEW(xx, 2*pc-yy, pc) #warning: nonsense if emission line is much higher than continuum!
+        # pew = pEW(xx, 2*pc-yy, pc) #warning: nonsense if emission line is much higher than continuum!
+        pew = intflux(xx,yy,pc)
     else:
         pew = pEW(xx,yy,pc)
+    if test_fit and (pew<0.0):
+        raise AssertionError('bad line flux/pEW')
     # the central wavelength
     if emission:
         imax = np.argmax(yy2-pc)
@@ -340,16 +412,22 @@ def calc_everything(x, y, err, xmid, emission=False, plot=0, width=100.0,
     else:
         imin = np.argmax(pc-yy2)
         wl_mid = xx[imin]
-    # the relative depth/height of the feature
-    relative = yy2/pc
+    # The relative depth of the absorption feature (normalized to continuum),
+    #  or absolute height of emission features.
     if emission:
-        reldh = np.max(relative) - 1.0
+        relative = yy2-pc
+        reldh = np.max(relative)
         # the FWHM of the emission
-        fwhm = FWHM(xx, relative, 1.0, plot=p, emission=True)
+        fwhm = FWHM(xx, relative, 0.0, plot=p, emission=True)
     else:
+        relative = yy2/pc
         reldh = 1.0 - np.min(relative)
         # the FWHM of the absorption
         fwhm = FWHM(xx, relative, 1.0, plot=p)
+    if test_fit and (fwhm<0.0):
+        raise AssertionError('bad FWHM')
+    if test_fit and (reldh<0.0):
+        raise AssertionError('bad line depth')
 
     return pew, wl_mid, reldh, fwhm
 
@@ -468,12 +546,19 @@ def parameterize_pcygni(x, y, err, xmid, plot=False, width=300.0, smoothing_orde
                 width *= 1.5
                 attempts += 1
                 continue
-            elif (np.argmin(yy2) == 0) or (np.min(yy2) == len(yy2)-1):
-                print 'bad parameterization'
-                # this happens if one of the edges is the minimum
-                width *= 1.5
-                attempts += 1
-                continue
+            # Note: it's common (and ok) if P-Cygni profile edges are the local max/min
+            # elif (np.argmin(yy2) == 0) or (np.argmin(yy2) == len(yy2)-1):
+            #     print 'minimum at edge'
+            #     # try widening the feature
+            #     width *= 1.5
+            #     attempts += 1
+            #     continue
+            # elif (np.argmax(yy2) == 0) or (np.argmax(yy2) == len(yy2)-1):
+            #     print 'maximum at edge'
+            #     # try widening the feature
+            #     width *= 1.5
+            #     attempts += 1
+            #     continue
             else:
                 break
         else:
