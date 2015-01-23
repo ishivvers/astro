@@ -14,7 +14,10 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, CheckButtons
 from matplotlib import colors
 from subprocess import Popen, PIPE
-from pyES import Common, Synpp
+try:
+    from pyES import Common, Synpp
+except ImportError:
+    from astro.pyES import Common, Synpp
 
 ion_dict = {100:'H I', 200:'He I', 201:'He II', 300:'Li I', 301:'Li II', 400:'Be I',
             401:'Be II', 402:'Be III', 500:'B I', 501:'B II', 502:'B III', 503:'B IV',
@@ -162,6 +165,7 @@ class SynSet():
         self.spec_ax = plt.subplot2grid( (ntall, 6), (0,0), rowspan=3, colspan=4 )
         self.spec_ax.plot( self.spec[:,0], self.spec[:,1], color='k' )
         if not self.gui_debug:
+            self.old_model_line = None
             self.model_line, = self.spec_ax.plot( self.synspec[:,0], self.synspec[:,1], color='r', label='Requires Update' )
             self.ax_legend = self.spec_ax.legend(loc=1)
             if current_calc: self.ax_legend.set_visible(False)
@@ -281,7 +285,11 @@ class SynSet():
     def _replot_spectrum(self):
         if self.verbose: print 'replotting model'
         if not self.gui_debug:
-            self.model_line.remove()
+            if self.old_model_line != None:
+                self.old_model_line.remove()
+            self.model_line.set_c('b')
+            self.model_line.set_label(None)
+            self.old_model_line = self.model_line
             self.model_line, = self.spec_ax.plot( self.synspec[:,0], self.synspec[:,1], color='r', label='Requires Update' )
             self.ax_legend = self.spec_ax.legend(loc=1)
             self.ax_legend.set_visible(False)
@@ -293,16 +301,16 @@ class SynSet():
         self._build_figure(newfig=True, current_calc=False)
 
     def _update_as(self, val):
-        self.syn.setups[0].a0 = self.a_sliders[0].val
-        self.syn.setups[0].a1 = self.a_sliders[1].val
-        self.syn.setups[0].a2 = self.a_sliders[2].val
+        self.syn.setups[0].a0 = round(self.a_sliders[0].val, 2)
+        self.syn.setups[0].a1 = round(self.a_sliders[1].val, 2)
+        self.syn.setups[0].a2 = round(self.a_sliders[2].val, 2)
         if not self.gui_debug: self.ax_legend.set_visible(True)
         plt.draw()
 
     def _update_os(self, val):
-        self.syn.setups[0].v_phot = self.o_sliders[0].val
-        self.syn.setups[0].v_outer = self.o_sliders[1].val
-        self.syn.setups[0].t_phot = self.o_sliders[2].val
+        self.syn.setups[0].v_phot = round(self.o_sliders[0].val, 2)
+        self.syn.setups[0].v_outer = round(self.o_sliders[1].val, 2)
+        self.syn.setups[0].t_phot = round(self.o_sliders[2].val, 2)
         if not self.gui_debug: self.ax_legend.set_visible(True)
         plt.draw()
 
@@ -314,11 +322,11 @@ class SynSet():
 
     def _update_ions(self, val):
         for i,ion in enumerate(self.syn.setups[0].ions):
-            ion.log_tau = self.tau_sliders[i].val
-            ion.v_min = self.vmin_sliders[i].val
-            ion.v_max = self.vmax_sliders[i].val
-            ion.aux = self.aux_sliders[i].val
-            ion.temp = self.temp_sliders[i].val
+            ion.log_tau = round(self.tau_sliders[i].val,2)
+            ion.v_min = round(self.vmin_sliders[i].val, 2)
+            ion.v_max = round(self.vmax_sliders[i].val, 2)
+            ion.aux = round(self.aux_sliders[i].val, 2)
+            ion.temp = round(self.temp_sliders[i].val, 2)
         if not self.gui_debug: self.ax_legend.set_visible(True)
         plt.draw()
 
