@@ -10,7 +10,10 @@ Usage: synwatch <synapps.yaml.file> <synapps.running.log> <refresh interval (min
 
 """
 
-from pyES import Common, Synpp, Synapps
+try:
+    from pyES import Common, Synpp, Synapps
+except ImportError:
+    from astro.pyES import Common, Synpp, Synapps
 from subprocess import Popen, PIPE
 import os
 import sys
@@ -210,6 +213,7 @@ def update_plot( syn_spec, true_spec, setups, name='SYNAPPS' ):
         ax.set_xticklabels( labels )
         ax.annotate('photosphere', (x[-1], setup.t_phot+0.5))
     plt.draw()
+    plt.show()
     
 
 
@@ -220,9 +224,8 @@ if __name__ == '__main__':
         refresh_interval = float( sys.argv[-1] ) * 60
     except:
         raise Exception('Usage: synwatch <synapps.yaml.file> <synapps.running.log> <refresh interval (minutes)>')
-    
+    # plt.ion()
     set_OMP()
-    plt.ion()
     fig = plt.figure( figsize=(12,8) )
     nframe = 0
     while True:

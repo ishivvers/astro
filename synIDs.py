@@ -12,8 +12,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from subprocess import Popen, PIPE
-from pyES import Synpp
 from astro.iAstro import pretty_plot_spectra
+try:
+    from pyES import Common, Synpp
+except ImportError:
+    from astro.pyES import Common, Synpp
 
 ion_dict = {100:'H I', 200:'He I', 201:'He II', 300:'Li I', 301:'Li II', 400:'Be I',
             401:'Be II', 402:'Be III', 500:'B I', 501:'B II', 502:'B III', 503:'B IV',
