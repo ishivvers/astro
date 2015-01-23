@@ -459,7 +459,7 @@ def fit_gaussian( x, y, interactive=False, plot=True, floor=True, p0={} ):
         plt.show()
         
     else:
-        # estimate Gaussian parameters
+        # estimate Gaussian parameters or get from input dictionary
         A0 = np.max(y)
         imax = np.argmax(y)
         mu0 = x[imax]
