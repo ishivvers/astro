@@ -87,6 +87,11 @@ def julian_date(year,month,day,hour,minute,second):
 
   return MJD0 + mjdmidnight + fracofday
 
+def jd2mjd( jd ):
+  return jd - MJD0
+
+def mjd2jd( mjd ):
+  return mjd + MJDO
 
 def caldate(mjd):
   """Given mjd return calendar date.
@@ -124,6 +129,24 @@ def caldate(mjd):
   sign,hour,minute,second = decimal_to_base60(hours)
   
   return (year,month,day,int(sign+str(hour)),minute,second)
+
+def parse_datestring( ds ):
+  """
+  Parses a flipper-format date string, returning the JD.
+  Input string must be in UT, with a format like:
+   20150215.445 = Feb 15.445, 2015
+  """
+  y = int(ds[:4])
+  mo = int(ds[4:6])
+  d = int(float(ds[6:]))
+  if '.' in ds:
+    frac = float( '.'+ds.split('.')[1] )
+    h = int(frac*24)
+    m = int((frac*24-h)*60)
+    s = int((((frac*24-h)*60)-m)*60)
+  else:
+    h = m = s = 0
+  return julian_date(y,mo,d,h,m,s)
 
 if __name__ == '__main__':
   print "Julian date for 2010/1/1 13:20:12.3456 : ",
