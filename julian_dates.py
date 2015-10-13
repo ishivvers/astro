@@ -91,7 +91,7 @@ def jd2mjd( jd ):
   return jd - MJD0
 
 def mjd2jd( mjd ):
-  return mjd + MJDO
+  return mjd + MJD0
 
 def caldate(mjd):
   """Given mjd return calendar date.

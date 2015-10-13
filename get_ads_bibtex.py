@@ -11,27 +11,45 @@ A quick script that scans a *.tex file and searches for all of the citations wit
 import re
 import urllib2
 
-def pull_all_citations( tex_file, bib_file, verbose=True ):
+def pull_all_citations( tex_file, bib_file, verbose=True, update=True ):
     """
     Given a .tex file, will scan it and search for all citations
     within it.  For any citation that is formatted with an ADS-compatible bibstring
     (i.e. 2013ApJ...768L..14P, or 2011MNRAS.412.1441L), this script will pull the
     bibtex entry from ADS and will insert them all into the .bib file given.
     WARNING: will overwrite the bib_file!
+    If path to bib file is given, and file exists, and update=True, will scan it first and won't 
+     bother to re-download citations.
     """
     uri = "http://adsabs.harvard.edu/cgi-bin/nph-bib_query?bibcode=%s&data_type=BIBTEX"
+    
+    if update:
+        try:
+            oldbib = open( bib_file, 'r' ).read()
+            oldcites = re.findall('@[^{]+{[^}]+\n', oldbib)
+            oldcites = [c.split('{')[1].split(',')[0] for c in oldcites]
+            print 'Already have:'
+            print '\n'.join( [cc for cc in oldcites] ) 
+        except:
+            oldcites = []
+    else:
+        oldcites = []
 
     # first parse the .tex file and pull out all the citations
     fstring = open( tex_file, 'r' ).read()
-    matches = re.findall( '\\cite[pt]{[^\s]+}', fstring )
+    matches = re.findall( r'\\cite[pt].*{[^}]+}', fstring )
     citations = []
     for c in matches:
-        c = c.split('{')[1].strip('}')
+        c = c.split('{')[1].split('}')[0]
         for cc in c.split(','):
-            citations.append(cc)
+            if cc not in citations and cc not in oldcites:
+                citations.append(cc)
+    if verbose:
+        print 'Found these new citations:'
+        print '\n'.join( [cc for cc in citations] ) 
 
     # now go through each and try and pull the bibtex entry
-    outf = open( bib_file, 'w' )
+    outf = open( bib_file, 'a' )
     for c in citations:
         if verbose:
             print 'Searching ADS for',c,'...',

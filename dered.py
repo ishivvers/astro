@@ -79,6 +79,7 @@ from ephem._libastro import eq_gal
 from urllib2 import urlopen
 import xml.etree.ElementTree as xmltree
 import re
+from astropysics import obstools
 
 def load_dust_maps(dust_map_location='/home/isaac/Working/observations/dust_maps/'):
     hdu = pf.open(dust_map_location+'SFD_dust_4096_ngp.fits')[0]
@@ -208,3 +209,43 @@ def remove_galactic_reddening( srchstr, wave, flux, R_V=3.1, verbose=False ):
     if verbose: print 'dereddening by E(B-V) =',EBV
     # return the de-reddened flux vector and the E(B-V) used
     return dered_CCM( wave, flux, EBV, R_V ), EBV
+
+
+"""
+Below taken from Pat!
+"""
+
+def cardelli(lam, R_v=3.1):
+    """
+    Calculate Alam/Av for the Cardelli dust law given a wavelength lam in angstroms
+    """
+    C = obstools.CardelliExtinction(Rv=R_v)
+    return C.Alambda(lam)/C.Alambda('V')
+
+def calzetti(lam):
+    """
+    Calculate Alam/Av for the Calzetti dust law given a wavelength lam in angstroms
+    """
+    C = obstools.CalzettiExtinction()
+    return C.Alambda(lam)/C.Alambda('V')
+
+def calc_extinction_from_balmer_decrement(halpha,hbeta,halpha_err=None,hbeta_err=None,recom_ratio=2.86,R_v=3.1,which='cardelli'):
+    import math
+    if which == 'cardelli':
+        halpha_ext_ratio = cardelli(6562.81, R_v)
+        hbeta_ext_ratio = cardelli(4861.0, R_v)
+    elif which == 'calzetti':
+        halpha_ext_ratio = calzetti(6562.81)
+        hbeta_ext_ratio = calzetti(4861.0)
+    else:
+        raise Exception('Do not understand which law to use.')
+    num = recom_ratio * hbeta / halpha
+    try:
+        A_v = 2.5 * math.log10(num) / (halpha_ext_ratio - hbeta_ext_ratio)    
+    except:
+        A_v = -99
+    if (halpha_err != None) and (hbeta_err != None):
+        dA_v = abs(2.5 / math.log(10) / (halpha_ext_ratio - hbeta_ext_ratio) * ( (halpha_err/halpha)**2. + (hbeta_err/hbeta)**2.) )**0.5
+    else:
+        dA_v = None
+    return A_v, dA_v

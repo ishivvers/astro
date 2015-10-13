@@ -442,8 +442,10 @@ def fit_gaussian( x, y, interactive=False, plot=True, floor=True, p0={} ):
             a0 = np.percentile(y[mask], 5.)
             b0 = 0.
             [a,b, A,mu,sigma], pcov = curve_fit(gpl, x[mask], y[mask], p0=[a0,b0, A0,mu0,sig0])
+            [a_std,b_std, A_std,mu_std,sigma_std] = map(np.sqrt, [pcov[i,i] for i in range(pcov.shape[0])])
         else:
             [A,mu,sigma], pcov = curve_fit(gauss, x[mask], y[mask], p0=[A0,mu0,sig0])
+            [A_std,mu_std,sigma_std] = map(np.sqrt, [pcov[i,i] for i in range(pcov.shape[0])])
 
         # finally, plot the result
         xplot = np.linspace(min(x[mask]), max(x[mask]), len(x[mask])*100)
@@ -488,8 +490,10 @@ def fit_gaussian( x, y, interactive=False, plot=True, floor=True, p0={} ):
             a0 = np.percentile(y, 5.)
             b0 = 0.
             [a,b, A,mu,sigma], pcov = curve_fit(gpl, x, y, p0=[a0,b0, A0,mu0,sig0])
+            [a_std,b_std, A_std,mu_std,sigma_std] = map(np.sqrt, [pcov[i,i] for i in range(pcov.shape[0])])
         else:
             [A,mu,sigma], pcov = curve_fit(gauss, x, y, p0=[A0,mu0,sig0])
+            [A_std,mu_std,sigma_std] = map(np.sqrt, [pcov[i,i] for i in range(pcov.shape[0])])
 
         if plot:
             xplot = np.linspace(min(x), max(x), len(x)*100)
@@ -501,10 +505,11 @@ def fit_gaussian( x, y, interactive=False, plot=True, floor=True, p0={} ):
             plt.title('center: {} -- sigma: {} -- FWHM: {}'.format(round(mu,4), round(sigma,4), round(2.35482*sigma,4)))
             plt.show()
 
-    outdict = {'A':A, 'mu':mu, 'sigma':sigma, 'FWHM':2.35482*sigma}
+    outdict = {'A':A, 'mu':mu, 'sigma':sigma, 'FWHM':2.35482*sigma,
+               'A_err':A_std, 'mu_err':mu_std, 'sigma_err':sigma_std, 'FWHM_err':2.35482*sigma_std,}
     if floor:
-        outdict['line_intercept'] = a
-        outdict['line_slope'] = b
+        outdict.update( {'line_intercept':a, 'line_intercept_err':a_std,
+                         'line_slope':b, 'line_slope_err':b_std} )
         return outdict, gpl(x, a,b, A,mu,sigma)
     else:
         return outdict, gauss(x, A,mu,sigma)
@@ -920,10 +925,21 @@ def doppcor( x, val, velocity=True ):
     '''
     x = np.array(x)
     if velocity:
-        newx = x - x*(val/2.998E5)
+        beta = val/2.998e5
+        z = (1.0+beta)**0.5/(1.0-beta)**0.5 - 1.0
     else:
-        newx = x/(1.0+val)
+        z = val
+    newx = x / (z + 1.0)
     return newx
+
+def get_velocity( wl_obs, wl_true ):
+    '''
+    Use relativistic Doppler equation to get the velocity of a feature
+     that is shifted from wl_true to wl_obs.
+    '''
+    A = (wl_obs / wl_true)**2
+    v = ((A-1.0)*2.998e5) / (A + 1.0)
+    return v
 
 
 def parse_nist_table( s ):
@@ -988,6 +1004,8 @@ def query_nist(ion, low_wl, upp_wl, n_out=20):
     mask = np.argsort(aks)[:-n_out:-1]
     return wls[mask], aks[mask]
 
+lookathis = lambda x: lookatme(*np.loadtxt(x, unpack=True))
+
 class lookatme:
     '''
     A tool to look at the properties of a SN spectrum.
@@ -1050,7 +1068,8 @@ class lookatme:
                 'Ca II': [3934, 3969, 7292, 7324, 8498, 8542, 8662], 'O III': [4959, 5007],
                 'Fe II': [5018, 5169, 7155], 'S II': [5433, 5454, 5606, 5640, 5647, 6715],
                 'Fe III': [4397, 4421, 4432, 5129, 5158], '[O I]':[6300, 6364],
-                '[Ca II]':[7291,7324], 'Mg I]':[4571] }
+                '[Ca II]':[7291,7324], 'Mg I]':[4571],
+                '[N II]':[6548.05, 6583.45] }
         # use a subset of mpl colors 
         self.allcolors = [c for c in colors.cnames.keys() if ('dark' in c) or ('medium') in c ] +\
                           'r g b c m k'.split()
@@ -1188,8 +1207,9 @@ class lookatme:
         self.fitted_lines.append(plt.plot(self.wl[mask],garray,'r'))
         # get the Gaussian alone, w/o the line
         garray = gauss( self.wl[mask], gparams['A'], gparams['mu'], gparams['sigma'] )
-        print ' A: %.3f\n mu: %.3f\n sigma: %.3f\n FWHM: %.3f\n Integral: %.3f\n' \
-              %(gparams['A'], gparams['mu'], gparams['sigma'], gparams['FWHM'], trapz(garray, x=self.wl[mask]))
+        print ' A: %.2e (%.2e)\n mu: %.3f (%.5f)\n sigma: %.3f (%.5f)\n FWHM: %.3f (%.5f)\n Integral: %.2e\n' \
+              %(gparams['A'],gparams['A_err'], gparams['mu'],gparams['mu_err'],
+                gparams['sigma'],gparams['sigma_err'], gparams['FWHM'],gparams['FWHM_err'], trapz(garray, x=self.wl[mask]))
         plt.draw()
 
     def calc_equiv_width(self):
@@ -1397,3 +1417,14 @@ def open_multispec_fits(f):
     return wl,fl,er,bg
 
 
+def parse_flip_lc(f):
+    lines = [l.strip().split() for l in open(f,'r').readlines() if l[0]!='#']
+    outd = {}
+    for l in lines:
+        if l[4] not in outd.keys():
+            outd[l[4]] = []
+        outd[l[4]].append(map(float, l[:4]))
+    # array-ify it
+    for k in outd.keys():
+        outd[k] = np.array(outd[k])
+    return outd

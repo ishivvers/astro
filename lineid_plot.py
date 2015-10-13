@@ -268,7 +268,8 @@ def plot_line_ids(wave, flux, line_wave, line_label1, label1_size=None,
               The location of the annotation point, in data coords. If
               the value is scalar then it is used for all. Default
               value is the upper bound of the Axes, at the time of
-              plotting.
+              plotting.  If list/array, it must be sorted by increasing
+              wavelength.
           box_loc: scalar or list of floats
               The y axis location of the text label boxes, in data
               units. The default is to place it above the `arrow_tip`
@@ -280,10 +281,16 @@ def plot_line_ids(wave, flux, line_wave, line_label1, label1_size=None,
               layout appearance is independent of the y data range.
           max_iter: int
               Maximum iterations to use. Default is set to 1000.
-          color: matplotlib color
-              Color of vertical lines in plot.
+          color: matplotlib color or list of colors
+              Color of vertical lines in plot. List must be sorted
+               by increasing wavelength.
+          text_color:  matplotlib color or list of colors
+              Color of text annotations. List must be sorted
+               by increasing wavelength.
           zorder: any number
               zorder of vertical lines in plot.
+          linestyle:
+              the linestyle of the vertical lines; defaults to dashed.
 
     Returns
     -------
@@ -385,6 +392,16 @@ def plot_line_ids(wave, flux, line_wave, line_label1, label1_size=None,
 
     # Draw boxes at initial (x, y) location.
     for i in range(nlines):
+        tccc = kwargs.get('text_color')
+        if type(tccc) == list:
+            tccc = tccc[i]
+        if tccc == None:
+            tccc = 'k'
+        ccc = kwargs.get('color')
+        if type(ccc) == list:
+            ccc = ccc[i]
+        if ccc == None:
+            ccc = 'k'
         ax.annotate(line_label1[i], xy=(line_wave[i], arrow_tip[i]),
                     xytext=(box_loc[i][0],
                             box_loc[i][1]),
@@ -394,14 +411,22 @@ def plot_line_ids(wave, flux, line_wave, line_label1, label1_size=None,
                     fontsize=label1_size[i],
                     weight=label_weight,
                     arrowprops=dict(arrowstyle="-",
-                                    relpos=(0.5, 0.0)),
+                                    relpos=(0.5, 0.0),
+                                    edgecolor=ccc),
+                    color=tccc,
                     label=label_u[i])
         if extend[i]:
             ccc = kwargs.get('color')
+            if type(ccc) == list:
+                ccc = ccc[i]
             if ccc == None:
                 ccc = 'k'
+            ls = kwargs.get('linestyle')
+            if ls == None:
+                ls = '--'
+
             ax.plot([line_wave[i]] * 2, [arrow_tip[i], line_flux[i]],
-                    linestyle="--", color=ccc,
+                    linestyle=ls, color=ccc,
                     scalex=False, scaley=False,
                     label=label_u[i] + "_line",
                     zorder=kwargs.get('zorder'))
