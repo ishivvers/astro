@@ -283,9 +283,10 @@ def smooth_FFT( x, y, c=100.0, plot=False ):
     c: 1/c = cutoff frequency 
     plot: if True, produces two plots to examine this process
     
-    Returns: smoothed Y
+    Returns: smoothed Y, noise array
     """
     yf = np.fft.fft( y )
+    noisef = np.copy(yf)
     # assume equal spacing
     spacing = np.median( x[1:]-x[:-1] )
     N = len( y )
@@ -305,16 +306,19 @@ def smooth_FFT( x, y, c=100.0, plot=False ):
     # mask high-frequency power and invert the FFT
     m = (np.abs(xf)>cutoff)
     yf[m] = 0.0
+    noisef[np.invert(m)] = 0.0
     Y = np.fft.ifft( yf ).real
+    noise = np.fft.ifft( noisef ).real
     if plot:
         plt.figure()
         plt.plot(x,y,'k')
         plt.plot(x,Y,'r',lw=2)
+        plt.plot(x,noise,'grey')
         plt.xlabel('Wavelength')
         plt.ylabel('Flux')
         plt.title('Smoothing Result')
         plt.show()
-    return Y
+    return Y, noise
     
 
 def smooth( x, y, width=None, window='hanning' ):
