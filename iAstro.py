@@ -273,6 +273,50 @@ def rebin1D( a, factor ):
     
     return np.hstack( (arr1, arr2) )
 
+def smooth_FFT( x, y, c=100.0, plot=False ):
+    """
+    Smooth an input array by performing an FFT, setting power at high frequencies to zero,
+      and then returning the inverse FFT.
+      Assumes that the data are regularly spaced in x.
+    
+    x,y: data (y) on (x)
+    c: 1/c = cutoff frequency 
+    plot: if True, produces two plots to examine this process
+    
+    Returns: smoothed Y
+    """
+    yf = np.fft.fft( y )
+    # assume equal spacing
+    spacing = np.median( x[1:]-x[:-1] )
+    N = len( y )
+    xf = np.fft.fftfreq( N, d=spacing )
+
+    # plot the cutoff frequency
+    cutoff = 1.0/c
+    if plot:
+        Nf = len(xf)/2
+        plt.figure()
+        plt.semilogy( xf[:Nf], yf[:Nf] )
+        plt.vlines([cutoff], plt.ylim()[0], plt.ylim()[1], linestyles='dashed')
+        plt.xlabel('1 / wavelength')
+        plt.ylabel('Power')
+        plt.title('Cutoff')
+
+    # mask high-frequency power and invert the FFT
+    m = (np.abs(xf)>cutoff)
+    yf[m] = 0.0
+    Y = np.fft.ifft( yf ).real
+    if plot:
+        plt.figure()
+        plt.plot(x,y,'k')
+        plt.plot(x,Y,'r',lw=2)
+        plt.xlabel('Wavelength')
+        plt.ylabel('Flux')
+        plt.title('Smoothing Result')
+        plt.show()
+    return Y
+    
+
 def smooth( x, y, width=None, window='hanning' ):
     '''
     Smooth the input spectrum y (on wl x) with a <window> kernel
