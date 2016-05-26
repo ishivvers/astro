@@ -77,7 +77,15 @@ def show_one_off(yaml_file, spec_file, save_plots=True, save_path='ions_off_plot
         plt.title(yaml_file + ' -- Effect of '+ion_dict[ion.ion])
         if save_plots:
             if verbose: print 'saving image for',ion_dict[ion.ion]
-            plt.savefig(save_path + yaml_file + '.' + ion_dict[ion.ion].replace(' ','_') + '.png')
+            outf = save_path + yaml_file + '.' + ion_dict[ion.ion].replace(' ','_') + '.png'
+            if os.path.exists( outf ):
+                i = 2
+                while True:
+                    outf = save_path + yaml_file + '.' + ion_dict[ion.ion].replace(' ','_') + str(i) + '.png'
+                    if not os.path.exists( outf ):
+                        break
+                    i +=1
+            plt.savefig( outf )
         if show_plots:
             plt.show()
         plt.close()
@@ -127,7 +135,15 @@ def show_one_on(yaml_file, spec_file, save_plots=True, save_path='ions_on_plots/
         plt.title(yaml_file + ' -- Effect of '+ion_dict[ion.ion])
         if save_plots:
             if verbose: print 'saving image for',ion_dict[ion.ion]
-            plt.savefig(save_path + yaml_file + '.' + ion_dict[ion.ion].replace(' ','_') + '.png')
+            outf = save_path + yaml_file + '.' + ion_dict[ion.ion].replace(' ','_') + '.png'
+            if os.path.exists( outf ):
+                i = 2
+                while True:
+                    outf = save_path + yaml_file + '.' + ion_dict[ion.ion].replace(' ','_') + str(i) + '.png'
+                    if not os.path.exists( outf ):
+                        break
+                    i +=1
+            plt.savefig( outf )
         if show_plots:
             plt.show()
         plt.close()

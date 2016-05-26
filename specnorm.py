@@ -9,6 +9,7 @@ class normalizer:
     An interactive spline fitting routine for determining the continuum
      level of a spectrum.
 
+    Should be run within ipython --pylab
     """
 
     def __init__(self, wave, flux, window=10.0, name=None, filename=None):
