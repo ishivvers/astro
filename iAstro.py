@@ -441,10 +441,10 @@ def fit_gaussian( x, y, interactive=False, plot=True, floor=True, p0={} ):
             # estimate line parameters
             a0 = np.percentile(y[mask], 5.)
             b0 = 0.
-            [a,b, A,mu,sigma], pcov = curve_fit(gpl, x[mask], y[mask], p0=[a0,b0, A0,mu0,sig0])
+            [a,b, A,mu,sigma], pcov = curve_fit(gpl, x[mask], y[mask], p0=[a0,b0, A0,mu0,sig0], maxfev=10000)
             [a_std,b_std, A_std,mu_std,sigma_std] = map(np.sqrt, [pcov[i,i] for i in range(pcov.shape[0])])
         else:
-            [A,mu,sigma], pcov = curve_fit(gauss, x[mask], y[mask], p0=[A0,mu0,sig0])
+            [A,mu,sigma], pcov = curve_fit(gauss, x[mask], y[mask], p0=[A0,mu0,sig0], maxfev=10000)
             [A_std,mu_std,sigma_std] = map(np.sqrt, [pcov[i,i] for i in range(pcov.shape[0])])
 
         # finally, plot the result
@@ -489,10 +489,10 @@ def fit_gaussian( x, y, interactive=False, plot=True, floor=True, p0={} ):
             # estimate line parameters
             a0 = np.percentile(y, 5.)
             b0 = 0.
-            [a,b, A,mu,sigma], pcov = curve_fit(gpl, x, y, p0=[a0,b0, A0,mu0,sig0])
+            [a,b, A,mu,sigma], pcov = curve_fit(gpl, x, y, p0=[a0,b0, A0,mu0,sig0], maxfev=10000)
             [a_std,b_std, A_std,mu_std,sigma_std] = map(np.sqrt, [pcov[i,i] for i in range(pcov.shape[0])])
         else:
-            [A,mu,sigma], pcov = curve_fit(gauss, x, y, p0=[A0,mu0,sig0])
+            [A,mu,sigma], pcov = curve_fit(gauss, x, y, p0=[A0,mu0,sig0], maxfev=10000)
             [A_std,mu_std,sigma_std] = map(np.sqrt, [pcov[i,i] for i in range(pcov.shape[0])])
 
         if plot:
@@ -937,7 +937,7 @@ def get_velocity( wl_obs, wl_true ):
     Use relativistic Doppler equation to get the velocity of a feature
      that is shifted from wl_true to wl_obs.
     '''
-    A = (wl_obs / wl_true)**2
+    A = (float(wl_obs) / wl_true)**2  # make sure Python does float math, rather than integer math
     v = ((A-1.0)*2.998e5) / (A + 1.0)
     return v
 
@@ -1003,6 +1003,35 @@ def query_nist(ion, low_wl, upp_wl, n_out=20):
     # return the strongest lines
     mask = np.argsort(aks)[:-n_out:-1]
     return wls[mask], aks[mask]
+
+
+def NaDEW2EBV(d1=None, d2=None, d1d2=None, r_v=3.1):
+    """Use relations from Poznanski+2012 (2012MNRAS.426.1465P)
+    to translate sodium D equivalent width measures (in Ang) into dust
+    obscuration estimates.
+
+    d1: ew of redder line (5897 A)
+    d2: ew of bluer line (5891 A)
+    d1d2: ew of both lines together
+    r_v: dust reddening law parametrization to use
+
+    RETURNS: estimates for all of d1, d2, d1d2 entered.
+    """
+    out = {}
+    if d1 != None:
+        ebv_d1 = [10**( 2.47*d1 - 1.76+(i*0.17)) for i in [0, 1, -1]]
+        print 'D1: E(B-V) = %.4f (+%.5f)(-%.5f)'%(ebv_d1[0], ebv_d1[1], ebv_d1[2])
+        out['d1'] = ebv_d1
+    if d2 != None:
+        ebv_d2 = [10**( 2.16*d2 - 1.91+(i*0.15)) for i in [0, 1, -1]]
+        print 'D2: E(B-V) = %.4f (+%.5f)(-%.5f)'%(ebv_d2[0], ebv_d2[1], ebv_d2[2])
+        out['d2'] = ebv_d2
+    if d1d2 != None:
+        ebv_d1d2 = [10**( 1.17*d1d2 - 1.85+(i*0.08)) for i in [0, 1, -1]]
+        print 'D1+D2: E(B-V) = %.4f (+%.5f)(-%.5f)'%(ebv_d1d2[0], ebv_d1d2[1], ebv_d1d2[2])
+        out['d1d2'] = ebv_d1d2
+    return out
+
 
 lookathis = lambda x: lookatme(*np.loadtxt(x, unpack=True))
 
@@ -1070,7 +1099,8 @@ class lookatme:
                 'Fe III': [4397, 4421, 4432, 5129, 5158], '[O I]':[6300, 6364],
                 '[Ca II]':[7291,7324], 'Mg I]':[4571],
                 '[N II]':[6548.05, 6583.45] }
-        # use a subset of mpl colors 
+        self.keep = np.ones_like( self.wl, dtype=bool )
+        # use a subset of mpl colors
         self.allcolors = [c for c in colors.cnames.keys() if ('dark' in c) or ('medium') in c ] +\
                           'r g b c m k'.split()
         plt.ion()
@@ -1078,6 +1108,7 @@ class lookatme:
         self.leg = None
         plt.show()
         plt.draw()
+        plt.ion()
         self.run()
 
     def reset(self):
@@ -1250,6 +1281,21 @@ class lookatme:
                 l.remove()
         self.fitted_lines = []
         plt.draw()
+
+    def blotch_spectrum(self):
+        '''
+        Interactively fix bad pixels and blotch out
+         bad regions, et cetera.
+        '''
+        print 'Click on the limits of the region to blotch out'
+        [x1,y1],[x2,y2] = plt.ginput(n=2, timeout=0)
+        xmin, xmax = min([x1,x2]), max([x1,x2])
+        m = (self.wl >= xmin) & (self.wl <= xmax)
+        self.keep[m] = False
+        # now show it
+        plt.clf()
+        self.fig = pretty_plot_spectra(self.wl[self.keep], self.fl[self.keep], fig=self.fig)
+        plt.draw()
     
     def save(self, fname):
         """
@@ -1263,11 +1309,17 @@ class lookatme:
         if self.er != None:
             fout.write( '# wavelength   flux   error\n')
             for i,wl in enumerate(self.wl):
-                fout.write( '%.5f    %.5f    %.5f\n' %(wl, self.fl[i], self.er[i]) )
+                s = '%.5f    %.5e    %.5e\n' %(wl, self.fl[i], self.er[i])
+                if not self.keep[i]:
+                    s = '#'+s
+                fout.write( s )
         else:
             fout.write( '# wavelength   flux\n')
             for i,wl in enumerate(self.wl):
-                fout.write( '%.5f    %.5f\n' %(wl, self.fl[i]) )
+                s = '%.5f    %.5e\n' %(wl, self.fl[i])
+                if not self.keep[i]:
+                    s = '#'+s
+                fout.write( s )
         fout.close()
         print 'Saved to',fname
     
@@ -1283,6 +1335,7 @@ class lookatme:
                             ' s: smooth the spectrum\n'+\
                             ' f: fit for a spectral line\n'+\
                             ' w: calculate equivalent width of absoption line\n' +\
+                            ' b: blotch (mask) out parts of the spectrum\n' +\
                             ' c: execute a python command\n'+\
                             ' u: undo everything and replot spectrum\n'+\
                             ' v: save spectrum to ascii file\n'+\
@@ -1374,6 +1427,8 @@ class lookatme:
                     continue
             elif 'w' in inn.lower():
                 self.calc_equiv_width()
+            elif 'b' in inn.lower():
+                self.blotch_spectrum()
             elif 'c' in inn.lower():
                 inn = raw_input('\nenter the python code to run\n')
                 try:
