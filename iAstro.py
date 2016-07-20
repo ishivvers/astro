@@ -984,8 +984,10 @@ def get_velocity( wl_obs, wl_true ):
     '''
     Use relativistic Doppler equation to get the velocity of a feature
      that is shifted from wl_true to wl_obs.
+    Can be used with wl_obs as scalar or array.
     '''
-    A = (float(wl_obs) / wl_true)**2  # make sure Python does float math, rather than integer math
+    wl_obs = np.array(wl_obs, dtype=float)
+    A = (wl_obs / wl_true)**2
     v = ((A-1.0)*2.998e5) / (A + 1.0)
     return v
 
