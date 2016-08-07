@@ -1,0 +1,217 @@
+#!/usr/bin/python
+'''
+create line, surface, radial, and countour plots in python,
+with full ds9 interactivity.
+now you don't have to use IRAF!
+
+author: Isaac Shivvers
+email: ishivvers@berkeley.edu
+started: June 5 2012
+
+USAGE:
+pymexam [<fits image>]
+
+PACKAGES NEEDED (easiest to install in this order):
+python, numpy, matplotlib, (etcetera)
+xpa:    http://hea-www.harvard.edu/saord/xpa/
+ds9:    http://hea-www.harvard.edu/saord/ds9/
+pyds9:  http://hea-www.harvard.edu/saord/ds9/pyds9/
+'''
+
+#################################################
+# imports
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import axes3d
+from scipy.optimize import curve_fit, leastsq
+import ds9
+import sys, re
+
+
+#################################################
+# function definitions
+
+def surface_plot(d):
+    try:
+        arr = d.get_arr2np()
+        d.set('mode pointer')
+        d.set('regions shape box')
+        raw_input('create/select a region covering the area you wish to plot, then hit enter...')
+        while True: #built a loop in case you forgot to select a region
+            # get region info
+            reg_str = d.get('regions selected').split('\n')
+            if len(reg_str) == 5:
+                coords = reg_str[-1].strip('box(').strip(')').split(',')
+                break
+            else:
+                raw_input('make sure exactly one region is selected! then hit enter...')
+        centerx = int(float(coords[0]))
+        centery = int(float(coords[1]))
+        width = int(float(coords[2]))
+        height = int(float(coords[3]))
+        # cut to info of interest
+        data = arr[centery-height/2:centery+height/2, centerx-width/2:centerx+width/2]
+        # reformat for plotting
+        X = np.arange(centerx-width/2, centerx+width/2)
+        Y = np.arange(centery-height/2, centery+height/2)
+        X, Y = np.meshgrid(X,Y)
+        # plot it up
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot_wireframe(X,Y,data)
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.show()
+    except Exception as e:
+       print 'WARNING: something weird happened... try again?'
+       print e
+       return
+
+def radial_plot(d):
+    try:
+        size = 7 #maximum radius to plot
+        arr = d.get_arr2np()
+        d.set('mode crosshair')
+        d.set('regions delete all')
+        raw_input('click on object to plot, then hit enter...')
+        x = int(float(d.get('crosshair').split(' ')[0]))
+        y = int(float(d.get('crosshair').split(' ')[1]))
+        data = arr[y-size:y+size, x-size:x+size]
+        maximum = np.max(data)
+        # find location of max through fit of 2D guassian
+        inparams = [maximum, size, size, 1, 1]
+        X,Y = np.meshgrid( np.arange(2*size),np.arange(2*size) )
+        # make everything 1D
+        X = X.reshape( len(X)**2 )
+        Y = Y.reshape( len(Y)**2 )
+        Z = data.reshape( len(data)**2 )
+        fit_params, success = leastsq(gauss2D_residuals, inparams, args=(Z, X, Y))
+        maxx = fit_params[1]
+        maxy = fit_params[2]
+        # calculate radial distance for each pixel
+        radii, vals = [],[]
+        for ii in range(len(Z)):
+            radii.append( np.sqrt((X[ii]-maxx)**2+(Y[ii]-maxx)**2) )
+        # optimize a gaussian fit to the data
+        popt, pcov = curve_fit(gauss, radii, Z)
+        xg = np.linspace(0,size,100)
+        yg = gauss(xg, popt[0], popt[1], popt[2])
+        yrange = np.max(yg) - np.min(yg)
+        # plot it up
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.scatter(radii, Z)
+        plt.plot(xg,yg)
+        FWHM = 2*xg[np.argmin( (yg-yrange/2)**2 )]
+        plt.title('FWHM: {} pixels'.format(round(FWHM,2)))
+        plt.xlabel('Radius (pixels)')
+        plt.ylabel('Counts')
+        plt.show()
+    except Exception as e:
+        print 'WARNING: something weird happened... try again?'
+        print e
+        return
+# these are used in radial_plot()
+def gauss(x, A, mu, sigma):
+    return A*np.exp(-(x-mu)**2/(2*sigma**2))
+def gauss2D(params, x, y):
+    A, x0, y0, sigma = params
+    return A*np.exp(-((x-x0)**2 + (y-y0)**2)/(2*sigma**2))
+def gauss2D_residuals(params, z, x, y):
+    # assuming a rotationally-symmetric gaussian
+    A, x0, y0, sigmaX, sigmaY = params
+    err = z - A*np.exp(-((x-x0)**2/(2*sigmaX**2) + (y-y0)**2/(2*sigmaX**2)))
+    return err
+
+def line_plot(d, method):
+    try:
+        arr = d.get_arr2np()
+        d.set('mode crosshair')
+        d.set('regions delete all')
+        if method == 'l':
+            raw_input('click line to plot, then hit enter...')
+            y = int(float(d.get('crosshair').split(' ')[1]))
+            data = arr[y,:]
+            xdata = np.arange(len(data))
+        elif method == 'c':
+            raw_input('click line to plot, then hit enter...')
+            x = int(float(d.get('crosshair').split(' ')[0]))
+            data = arr[:,x]
+            xdata = np.arange(len(data))
+        elif method == 'x':
+            raw_input('click first endpoint of line, then hit enter...')
+            x1 = int(float(d.get('crosshair').split(' ')[0]))
+            y = int(float(d.get('crosshair').split(' ')[1]))
+            raw_input('click second endpoint of line, then hit enter...')
+            x2 = int(float(d.get('crosshair').split(' ')[0]))
+            if x2>x1:
+                data = arr[y,x1:x2]
+                xdata = np.arange(x1,x2)
+            else:
+                data = arr[y,x2:x1]
+                xdata = np.arange(x2,x1)
+        elif method == 'y':
+            raw_input('click first endpoint of line, then hit enter...')
+            x = int(float(d.get('crosshair').split(' ')[0]))
+            y1 = int(float(d.get('crosshair').split(' ')[1]))
+            raw_input('click second endpoint of line, then hit enter...')
+            y2 = int(float(d.get('crosshair').split(' ')[1]))
+            if y2>y1:
+                data = arr[y1:y2,x]
+                xdata = np.arange(y1,y2)
+            else:
+                data = arr[y2:y1,x]
+                xdata = np.arange(y2,y1)
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.plot(xdata, data)
+        if method == 'x' or method == 'l':
+            plt.xlabel('X')
+        elif method == 'y' or method == 'c':
+            plt.xlabel('Y')
+        plt.ylabel('Counts')
+        plt.show()
+    except Exception as e:
+        print 'WARNING: something weird happened... try again?'
+        print e
+        return
+
+
+#################################################
+# main function
+
+if __name__ == '__main__':
+
+    # start ds9    
+    d = ds9.ds9('pymexamine')
+    
+    if len(sys.argv) > 1:
+        filename = sys.argv[1]
+        feedback = d.set('file '+filename)
+        if feedback != 1:
+            print 'file not found! open through ds9 instead.'
+    else:
+        print 'open fits file through ds9 to begin.'
+
+    print 'welcome to pymexam.\n'
+    # do what you want to do
+    while True:
+        feedback = raw_input('options:\n<s>: surface plot\n<r>: radial plot\n<l>: line plot\n'\
+                             '<c>: column plot\n<x>: plot section of line\n'\
+                             '<y>: plot section of column\n<q>: exit\n')
+        if 'q' in feedback:
+            exit()
+        elif 's' in feedback:
+            surface_plot(d)
+        elif 'r' in feedback:
+            radial_plot(d)
+        elif 'l' in feedback:
+            line_plot(d,'l')
+        elif 'c' in feedback:
+            line_plot(d,'c')
+        elif 'x' in feedback:
+            line_plot(d,'x')
+        elif 'y' in feedback:
+            line_plot(d,'y')
+
+
