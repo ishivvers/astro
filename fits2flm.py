@@ -2,7 +2,11 @@
 A quick script that converts a fits file (1d spectrum with appropriate linear
     parameters in the header) into a .flm ascii file.
 """
-import pyfits as pf
+try:
+    # pyfits recent moved to subset of astropy package
+    import pyfits as pf
+except:
+    from astropy.io import fits as pf
 import numpy as np
 
 

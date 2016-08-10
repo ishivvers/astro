@@ -74,7 +74,13 @@ Original documentation:
 ;-
 '''
 import numpy as np
-import pyfits as pf
+
+try:
+    # pyfits recent moved to subset of astropy package
+    import pyfits as pf
+except:
+    from astropy.io import fits as pf
+
 from ephem._libastro import eq_gal
 from urllib2 import urlopen
 import xml.etree.ElementTree as xmltree

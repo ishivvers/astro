@@ -15,7 +15,6 @@ from matplotlib import colors
 allcolors = [c for c in colors.cnames.keys() if ('dark' in c) or ('medium') in c ] +\
              'r g b c m k'.split()
 import re
-import pyfits
 from astro import dered
 from astro.fits2flm import fits2flm
 # looks like some versions of my python don't have the newest SciPY, so here's a hack
@@ -43,6 +42,12 @@ try:
     from scikits import datasmooth
 except:
     print 'Cannot load datasmooth; smooth function will be impaired.'
+
+try:
+    # pyfits recent moved to subset of astropy package
+    import pyfits
+except:
+    from astropy.io import fits
 
 class C:
     '''
