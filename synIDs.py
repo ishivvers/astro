@@ -69,7 +69,7 @@ def show_one_off(yaml_file, spec_file, save_plots=True, save_path='ions_off_plot
         model = run_syn(syn)
         ion.active = True
         # make a plot
-        fig = pretty_plot_spectra(spec[:,0], spec[:,1], spec[:,2])
+        fig = pretty_plot_spectra(spec[:,0], spec[:,1])
         plt.plot(original_model[:,0], original_model[:,1], 'cyan', lw=2, label='Full')
         plt.plot(model[:,0], model[:,1], 'red', lw=2, label='Without '+ion_dict[ion.ion])
         leg = plt.legend(loc='best')
@@ -127,7 +127,7 @@ def show_one_on(yaml_file, spec_file, save_plots=True, save_path='ions_on_plots/
         model = run_syn(syn)
         ion.active = False
         # make a plot
-        fig = pretty_plot_spectra(spec[:,0], spec[:,1], spec[:,2])
+        fig = pretty_plot_spectra(spec[:,0], spec[:,1])
         plt.plot(original_model[:,0], original_model[:,1], 'cyan', lw=2, label='Full')
         plt.plot(model[:,0], model[:,1], 'red', lw=2, label='Only '+ion_dict[ion.ion])
         leg = plt.legend(loc='best')

@@ -428,7 +428,7 @@ def plot_line_ids(wave, flux, line_wave, line_label1, label1_size=None,
             ax.plot([line_wave[i]] * 2, [arrow_tip[i], line_flux[i]],
                     linestyle=ls, color=ccc,
                     scalex=False, scaley=False,
-                    label=label_u[i] + "_line",
+                    #label=label_u[i] + "_line",
                     zorder=kwargs.get('zorder'))
 
     # Draw the figure so that get_window_extent() below works.
