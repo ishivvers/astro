@@ -66,6 +66,40 @@ def pull_all_citations( tex_file, bib_file, verbose=True, update=True ):
             print 'Success!'
     outf.close()
 
+def drop_all_duplicates( bibfile, outfile=None, verbose=False ):
+    """
+    Parses a natbib style bibliography file (*.bib) and drops all
+     entries with duplicate keywords.
+    If outfile==None, overwrites input file.
+    If verbose==True, says everything it would drop.
+    """
+    if outfile == None:
+        outfile = bibfile
+    instring = open(bibfile, 'r').read()
+    outf = open(outfile, 'w')
+    keywords = []
+    inlevel = 0
+    keeper = False
+    for i,char in enumerate(instring):
+        if char == '{':
+            inlevel +=1
+        elif char == '}':
+            inlevel -=1
+        elif (inlevel==0) & (char == '@'):
+            keyword = instring[i:].split(',',1)[0].split('{')[1]
+            if keyword not in keywords:
+                keywords.append(keyword)
+                keeper = True
+            else:
+                keeper = False
+                if verbose:
+                    print 'dropping',keyword
+        if keeper:
+            outf.write( char )
+    outf.close()
+    return keywords
+
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='''
