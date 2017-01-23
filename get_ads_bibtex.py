@@ -79,24 +79,33 @@ def drop_all_duplicates( bibfile, outfile=None, verbose=False ):
     outf = open(outfile, 'w')
     keywords = []
     inlevel = 0
+    ndropped = 0
     keeper = False
     for i,char in enumerate(instring):
         if char == '{':
             inlevel +=1
         elif char == '}':
             inlevel -=1
-        elif (inlevel==0) & (char == '@'):
-            keyword = instring[i:].split(',',1)[0].split('{')[1]
+        elif char == '@':
+            if inlevel != 0:
+                # we must be at 0th level, even if count seems wrong
+                if verbose:
+                    print 're-setting inlevel to 0 from',inlevel
+                inlevel = 0
+            keyword = (instring[i:].split(',',1)[0].split('{')[1]).lower()
             if keyword not in keywords:
                 keywords.append(keyword)
                 keeper = True
             else:
                 keeper = False
+                ndropped +=1
                 if verbose:
                     print 'dropping',keyword
         if keeper:
             outf.write( char )
     outf.close()
+    if verbose:
+        print 'dropped {} references total'.format(ndropped)
     return keywords
 
 
